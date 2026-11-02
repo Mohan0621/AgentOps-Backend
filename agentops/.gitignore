@@ -1,5 +1,11 @@
 HELP.md
 target/
+build/
+*.class
+*.jar
+*.war
+*.ear
+
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
@@ -25,9 +31,18 @@ target/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
 ### VS Code ###
 .vscode/
+*.code-workspace
+
+### OS / Logs ###
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.log
+*.tmp
+test_*.json
+.env

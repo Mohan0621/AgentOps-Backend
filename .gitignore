@@ -1,0 +1,56 @@
+# Root .gitignore for IncidentIQ (AgentOps)
+
+# Build artifacts & Maven
+**/target/
+target/
+build/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+
+# Maven wrapper
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# IDE & Editor files
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+*.code-workspace
+.project
+.classpath
+.settings/
+.factorypath
+.springBeans
+.sts4-cache
+.apt_generated
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# OS specific files
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.log
+*.tmp
+*.bak
+
+# Environment variables & secrets
+.env
+.env.*
+application-local.properties
+test_*.json
+
+# Documentation generated
+HELP.md
+

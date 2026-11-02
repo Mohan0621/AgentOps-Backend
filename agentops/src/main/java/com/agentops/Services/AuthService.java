@@ -1,54 +1,67 @@
 package com.agentops.Services;
 
-import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import com.agentops.Repositories.AuthRepo;
+import com.agentops.DTO.AuthResponse;
 import com.agentops.DTO.LoginRequest;
 import com.agentops.DTO.RegisterRequest;
-import com.agentops.DTO.AuthResponse;
+import com.agentops.Exceptions.UserAuthException;
+import com.agentops.Models.Role;
+import com.agentops.Models.User;
+import com.agentops.Repositories.UserRepository;
+import com.agentops.Security.JwtUtils;
 
 @Service
 public class AuthService {
 
-    private final AuthRepo repo;
-    private final PasswordEncoder encoder;
+    @Autowired
+    private UserRepository userRepository;
 
-    public AuthService(AuthRepo repo, PasswordEncoder encoder) {
-        this.repo = repo;
-        this.encoder = encoder;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtUtils jwtUtils;
+
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @Transactional
+    public AuthResponse register(RegisterRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new UserAuthException("Email is already registered: " + request.getEmail());
+        }
+
+        User user = new User();
+        user.setFullName(request.getFullName());
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole(Role.ROLE_USER);
+        userRepository.save(user);
+
+        String token = jwtUtils.generateToken(user.getEmail());
+        return new AuthResponse(token, "User registered successfully");
     }
 
-    public AuthResponse register(RegisterRequest user) {
-
-        if (repo.existsByEmail(user.getEmail())) {
-            throw new RuntimeException("Email already registered");
+    @Transactional(readOnly = true)
+    public AuthResponse login(LoginRequest request) {
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPassword()
+                    )
+            );
+        } catch (Exception ex) {
+            throw new UserAuthException("Invalid email or password");
         }
 
-        String hashedPassword = encoder.encode(user.getPass());
-
-        repo.saveUser(user.getEmail(), hashedPassword);
-
-        return new AuthResponse("Registration Successful");
-    }
-
-    public AuthResponse login(LoginRequest user) {
-
-        String storedPassword = repo.getUserPassword(user.getEmail());
-
-        if (storedPassword == null) {
-            throw new RuntimeException("Invalid Credentials");
-        }
-
-        boolean valid = encoder.matches(
-            user.getPass(),
-            storedPassword
-        );
-
-        if (!valid) {
-            throw new RuntimeException("Invalid Credentials");
-        }
-
-        return new AuthResponse("Login Successful");
+        String token = jwtUtils.generateToken(request.getEmail());
+        return new AuthResponse(token, "Login successful");
     }
 }
