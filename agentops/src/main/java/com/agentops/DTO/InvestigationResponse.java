@@ -7,7 +7,6 @@ import java.util.stream.Collectors;
 
 import com.agentops.Models.Investigation;
 import com.agentops.Models.InvestigationStatus;
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -40,7 +39,8 @@ public class InvestigationResponse {
     private List<CommentResponse> comments;
 
     public static InvestigationResponse fromEntity(Investigation inv) {
-        if (inv == null) return null;
+        if (inv == null)
+            return null;
 
         List<CommentResponse> commentList = inv.getComments() != null
                 ? inv.getComments().stream().map(CommentResponse::fromEntity).collect(Collectors.toList())
@@ -65,4 +65,3 @@ public class InvestigationResponse {
                 .build();
     }
 }
-

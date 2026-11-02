@@ -6,7 +6,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
@@ -50,8 +49,8 @@ public class ApiClient {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    public static HttpResponse<String> register(String email, String password) throws Exception {
-        String json = objectMapper.writeValueAsString(new LoginPayload(email, password));
+    public static HttpResponse<String> register(String fullName, String email, String password) throws Exception {
+        String json = objectMapper.writeValueAsString(new RegisterPayload(fullName, email, password));
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/api/register"))
                 .header("Content-Type", "application/json")
@@ -111,6 +110,7 @@ public class ApiClient {
     }
 
     public static record LoginPayload(String email, String password) {}
+    public static record RegisterPayload(String fullName, String email, String password) {}
     public static record CreateIncidentPayload(String title, String description, String errorLogs, String severity, String status, String incidentType) {}
 }
 

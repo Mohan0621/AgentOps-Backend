@@ -70,7 +70,7 @@
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<version>1.18.36</version>
+			<version>1.18.48</version>
 			<optional>true</optional>
 		</dependency>
 		<!-- Standard Spring Boot Test Starter -->
@@ -167,7 +167,7 @@
 								<path>
 									<groupId>org.projectlombok</groupId>
 									<artifactId>lombok</artifactId>
-									<version>1.18.36</version>
+									<version>1.18.48</version>
 								</path>
 							</annotationProcessorPaths>
 						</configuration>
@@ -183,7 +183,7 @@
 								<path>
 									<groupId>org.projectlombok</groupId>
 									<artifactId>lombok</artifactId>
-									<version>1.18.36</version>
+									<version>1.18.48</version>
 								</path>
 							</annotationProcessorPaths>
 						</configuration>

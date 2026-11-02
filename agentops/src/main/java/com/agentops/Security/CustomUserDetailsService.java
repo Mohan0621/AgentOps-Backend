@@ -1,6 +1,6 @@
 package com.agentops.Security;
 
-import java.util.Collections;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -23,12 +23,15 @@ public class CustomUserDetailsService implements UserDetailsService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
-        String roleName = user.getRole() != null ? user.getRole().name() : "ROLE_USER";
+        // Map Role enum to Spring Security GrantedAuthority
+        List<SimpleGrantedAuthority> authorities = user.getRole() != null
+                ? List.of(new SimpleGrantedAuthority(user.getRole().name()))
+                : List.of(new SimpleGrantedAuthority("ROLE_USER"));
 
         return new org.springframework.security.core.userdetails.User(
                 user.getEmail(),
                 user.getPassword(),
-                Collections.singletonList(new SimpleGrantedAuthority(roleName))
+                authorities
         );
     }
 }
