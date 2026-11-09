@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-09T19:02:00+05:30",
+  "title": "Design System: IncidentIQ",
+  "extensions": {
+    "colorMeta": {
+      "canvas-pure": { "role": "neutral", "displayName": "Canvas Pure", "canonical": "#FFFFFF", "tonalRamp": ["#18181B", "#3F3F46", "#71717A", "#A1A1AA", "#D4D4D8", "#F4F4F5", "#FAFAFA", "#FFFFFF"] },
+      "frost-surface": { "role": "neutral", "displayName": "Frost Surface", "canonical": "#F6F6F6", "tonalRamp": ["#262626", "#525252", "#737373", "#A3A3A3", "#D4D4D4", "#E5E5E5", "#F0F0F0", "#F6F6F6"] },
+      "sky-mist": { "role": "neutral", "displayName": "Sky Mist", "canonical": "#E8F3FE", "tonalRamp": ["#0C4A6E", "#0369A1", "#0284C7", "#38BDF8", "#7DD3FC", "#BAE6FD", "#CFE6FC", "#E8F3FE"] },
+      "ink-primary": { "role": "primary", "displayName": "Ink Primary", "canonical": "#000000", "tonalRamp": ["#000000", "#171717", "#262626", "#404040", "#525252", "#737373", "#A3A3A3", "#E5E5E5"] },
+      "horizon-blue": { "role": "secondary", "displayName": "Horizon Blue", "canonical": "#1B98F2", "tonalRamp": ["#0C4A6E", "#0369A1", "#0284C7", "#1B98F2", "#5BB4F6", "#96CBFA", "#CFE6FC", "#E5F2FF"] },
+      "horizon-purple": { "role": "tertiary", "displayName": "Horizon Purple", "canonical": "#CF69E0", "tonalRamp": ["#581C87", "#7E22CE", "#A855F7", "#CF69E0", "#E388F2", "#EEB3F7", "#F6D9FB", "#FDF4FF"] },
+      "aura-ember": { "role": "tertiary", "displayName": "Aura Ember", "canonical": "#FF8C51", "tonalRamp": ["#7C2D12", "#C2410C", "#EA580C", "#F97316", "#FF8C51", "#FDBA74", "#FED7AA", "#FFF7ED"] },
+      "positive-mint": { "role": "semantic", "displayName": "Positive Mint", "canonical": "#C0F2B5", "tonalRamp": ["#14532D", "#17510B", "#158142", "#22C55E", "#4ADE80", "#86EFAC", "#C0F2B5", "#F0FDF4"] },
+      "alert-red": { "role": "semantic", "displayName": "Alert Red", "canonical": "#F13931", "tonalRamp": ["#7F1D1D", "#991B1B", "#B91C1C", "#DC2626", "#F13931", "#F87171", "#FCA5A5", "#FEE2E2"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Public hero headlines paired with horizon-gradient accent spans." },
+      "headline": { "displayName": "Headline", "purpose": "Section leads across landing bands and Platform showcases." },
+      "title": { "displayName": "Title", "purpose": "Workspace view headers (Incident Queue, Report, Analytics)." },
+      "body": { "displayName": "Body", "purpose": "Descriptions, table cells, and structured AI diagnoses." },
+      "label": { "displayName": "Label", "purpose": "Uppercase tracked eyebrows, form labels, and table column headers." }
+    },
+    "shadows": [
+      { "name": "soft-ambient-card", "value": "0 6px 22px rgba(0, 0, 0, 0.06)", "purpose": "Standard elevated workspace cards and KPI stat tiles." },
+      { "name": "floating-hero-card", "value": "0 14px 42px rgba(0, 0, 0, 0.08)", "purpose": "Hero live-triage widget and centered auth card over horizon gradients." },
+      { "name": "active-segment-pill", "value": "0 2px 8px rgba(0, 0, 0, 0.08)", "purpose": "Floating white active pill inside frost segmented switchers." }
+    ],
+    "motion": [
+      { "name": "pill-hover-scale", "value": "scale(1.025) 150ms ease", "purpose": "Micro-response on capsule CTA pills." },
+      { "name": "tab-fade-in", "value": "opacity 0.35 -> 1.0 260ms ease", "purpose": "Crossfade transition between public website routes." },
+      { "name": "pipeline-stepper", "value": "900ms sequential stage tick", "purpose": "Step progress across the 6 autonomous investigation agents." }
+    ],
+    "breakpoints": [
+      { "name": "min-window", "value": "1020px" },
+      { "name": "default-desktop", "value": "1320px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Black Pill",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "High-contrast primary action pill across landing CTAs, Login, and Quick AI Diagnosis.",
+      "html": "<button class=\"ds-btn-primary\">Start investigating &rsaquo;</button>",
+      "css": ".ds-btn-primary { background: #000000; color: #FFFFFF; font-weight: 600; font-size: 13.5px; border: none; border-radius: 999px; padding: 10px 22px; cursor: pointer; transition: background 0.15s, transform 0.15s; } .ds-btn-primary:hover { background: #262626; transform: scale(1.025); } .ds-btn-primary:focus-visible { outline: 2px solid #1B98F2; outline-offset: 2px; }"
+    },
+    {
+      "name": "Rainbow AI Pipeline Pill",
+      "kind": "button",
+      "refersTo": "button-rainbow",
+      "description": "Horizon-bordered pill reserved exclusively for the 6-Agent Investigation trigger.",
+      "html": "<button class=\"ds-btn-rainbow\">6-Agent Investigation &rsaquo;</button>",
+      "css": ".ds-btn-rainbow { background: linear-gradient(#FFFFFF, #FFFFFF) padding-box, linear-gradient(225deg, #1B98F2, #CF69E0, #F56293, #FF635C, #FF8C51) border-box; color: #000000; font-weight: 700; font-size: 13.5px; border: 2px solid transparent; border-radius: 999px; padding: 10px 22px; cursor: pointer; transition: box-shadow 0.2s, transform 0.15s; } .ds-btn-rainbow:hover { box-shadow: 0 4px 16px rgba(207, 105, 224, 0.28); transform: scale(1.025); }"
+    },
+    {
+      "name": "Secondary Frost Pill",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Secondary action pill for Refresh, Clear Form, FAQs, and Sign Out.",
+      "html": "<button class=\"ds-btn-secondary\">Refresh Metrics</button>",
+      "css": ".ds-btn-secondary { background: rgba(255,255,255,0.85); color: #000000; font-weight: 600; font-size: 13.5px; border: 1px solid rgba(0,0,0,0.12); border-radius: 999px; padding: 10px 20px; cursor: pointer; transition: background 0.15s, border-color 0.15s; } .ds-btn-secondary:hover { background: #FFFFFF; border-color: rgba(0,0,0,0.24); }"
+    },
+    {
+      "name": "Frost Input Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Rounded search and incident ingestion input field with blue focus halo.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search incidents by #ID, title, or stack trace...\" />",
+      "css": ".ds-input { background: #F6F6F6; color: #000000; border: 1px solid #E5E7EB; border-radius: 12px; padding: 10px 14px; font-size: 13.5px; outline: none; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s; } .ds-input::placeholder { color: #9CA3AF; } .ds-input:focus { background: #FFFFFF; border-color: #1B98F2; box-shadow: 0 0 0 3px rgba(27, 152, 242, 0.18); }"
+    },
+    {
+      "name": "Segmented Nav Track",
+      "kind": "nav",
+      "description": "Frost capsule track holding workspace tab switchers and Sign In / Register toggles.",
+      "html": "<div class=\"ds-nav-track\"><button class=\"ds-seg active\">Incidents</button><button class=\"ds-seg\">Report Incident</button><button class=\"ds-seg\">Analytics</button></div>",
+      "css": ".ds-nav-track { display: inline-flex; gap: 4px; padding: 4px; background: #F6F6F6; border-radius: 999px; } .ds-seg { background: transparent; color: #52525B; border: none; font-size: 13px; font-weight: 600; padding: 7px 20px; border-radius: 999px; cursor: pointer; } .ds-seg.active { background: #FFFFFF; color: #000000; font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }"
+    },
+    {
+      "name": "Positive Status Pill",
+      "kind": "chip",
+      "refersTo": "badge-positive",
+      "description": "Semantic mint-and-forest badge indicating verified AI completions, Resolved state, or Live API health.",
+      "html": "<span class=\"ds-badge-pos\">6/6 Agents Completed</span>",
+      "css": ".ds-badge-pos { display: inline-block; background: #C0F2B5; color: #17510B; font-size: 11px; font-weight: 700; padding: 4px 11px; border-radius: 999px; }"
+    },
+    {
+      "name": "Editorial Surface Card",
+      "kind": "card",
+      "description": "Clean bordered white card container used across incident tables, KPI tiles, and workbench panes.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-eyebrow\">INCIDENT OVERVIEW</div><div class=\"ds-card-val\">42</div></div>",
+      "css": ".ds-card { background: #FFFFFF; border: 1px solid #EBEBEB; border-radius: 18px; padding: 20px 22px; box-shadow: 0 6px 22px rgba(0,0,0,0.06); } .ds-card-eyebrow { font-size: 11px; font-weight: 700; color: #71717A; letter-spacing: 0.6px; } .ds-card-val { font-size: 30px; font-weight: 700; color: #000000; margin-top: 8px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Horizon Command Press",
+    "overview": "IncidentIQ translates the high-contrast light editorial calm of https://www.serko.ai/ into a native JavaFX 21 desktop workbench backed by Spring Boot telemetry. Rather than immersing engineers in noisy dark-mode neon panels, the interface treats production incident triage like an architectural press sheet: pure white surfaces framed by soft frost cards, disciplined pure-black typography, and a focused horizon spectrum reserved exclusively for AI intelligence and primary hero breakthroughs.\n\nEvery flow—from the animated 3D wireframe telemetry globe on the public Home showcase through JWT authentication into the split-pane Incident Queue, Report ingestion, and Operational Analytics—inherits the exact same spatial cadence, pill geometry, and restrained signal palette.",
+    "keyCharacteristics": [
+      "Pure white canvases paired with soft frost surfaces and ice-sky feature bands rather than saturated backgrounds or dark mode.",
+      "Multi-stop sky-to-sunset spectrum (horizon-blue through horizon-purple, horizon-pink, and aura-ember) reserved for AI agent triggers, hero horizon atmosphere, and headline emphasis.",
+      "Universal 999px capsule pill affordances for actions, navigation switchers, and semantic status badges.",
+      "Selective HTML5 Canvas (WebView) integration inside native JavaFX scenes strictly where real-time 3D geodesic projection outperforms static vectors."
+    ],
+    "rules": [
+      { "name": "The Horizon Restraint Rule", "body": "Full multi-stop gradients belong exclusively to hero/CTA horizon backdrops, inline headline emphasis words, progress bars, and the tertiary 6-Agent Investigation pill border—never fill standard workspace cards or tables with saturated gradients.", "section": "colors" },
+      { "name": "The Mnemonic Guard Rule", "body": "Disable JavaFX mnemonic parsing on every dynamic or underscore-containing chip (APPLICATION_BUG, MEMORY_LEAK) so underscores render verbatim instead of being eaten as Alt-key accelerators.", "section": "typography" },
+      { "name": "The Flat-Track Rule", "body": "Segmented pill tracks and filter strips never cast drop shadows; only the selected active pill floats inside its frost track.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do preserve 100% light editorial grounds (#FFFFFF / #F6F6F6 / #E8F3FE) and pure black typography (#000000) across every route.",
+      "Do use native JavaFX SVGPath icons (brandLogoMark, chevronRightIcon, vector bolts) so glyphs render identically across Windows DPI configurations.",
+      "Do render multi-agent and quick AI outputs as scannable structured cards rather than unbroken walls of monospace log dumps.",
+      "Do set setMinWidth(Region.USE_PREF_SIZE) (leaving prefWidth at USE_COMPUTED_SIZE inside an unconstrained Pane host) on horizontal marquee labels and status pills inside flex HBox rows so labels never ellipsis-truncate or collapse to zero width."
+    ],
+    "donts": [
+      "Don't introduce dark-mode surfaces (#0d0d1a, neon cyan cards) anywhere in the inside workspace or auth screens (the public footer #000000 is the sole deliberate dark anchor).",
+      "Don't use CSS degree angles (linear-gradient(155deg, ...)) inside JavaFX stylesheets or inline styles; JavaFX CSS strictly requires directional keywords (to bottom right) or percentage coordinates.",
+      "Don't pass opaque/translucent backdrops (rgba(255,255,255,0.92)) onto sticky scrolled toolbars in JavaFX where backdrop-filter: blur is unsupported—use solid #FFFFFF once scrolled so scrolling headlines do not bleed faintly underneath nav links."
+    ]
+  }
+}
+
