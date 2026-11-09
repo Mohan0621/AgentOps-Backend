@@ -1,6 +1,7 @@
 /* ──────────────────────────────────────────────────────────────────
-   IncidentIQ – Global JavaFX Stylesheet (serko.ai Design System)
-   Light Editorial Canvas + Soft Frost Surfaces + Horizon Aura
+   IncidentIQ – Global JavaFX Stylesheet
+   Public Landing: serko.ai Design Grammar (Soft Horizon + Frost + Editorial Ink)
+   Authenticated Workspace: Operate Light Density (#FAFAFA canvas, #FFFFFF panes, #EAEAEA hairlines)
    ────────────────────────────────────────────────────────────────── */
 
 /* ── Root / Scene ─────────────────────────────────────────────── */
@@ -8,7 +9,7 @@
     -fx-font-family: "Plus Jakarta Sans", "Segoe UI", "Helvetica Neue", sans-serif;
     -fx-font-size: 14px;
     -fx-background-color: #FFFFFF;
-    -fx-text-fill: #000000;
+    -fx-text-fill: #09090B;
 }
 
 /* ── ScrollPane & ScrollBar ───────────────────────────────────── */
@@ -28,14 +29,14 @@
     -fx-pref-height: 8px;
 }
 .scroll-bar .track {
-    -fx-background-color: #F6F6F6;
+    -fx-background-color: transparent;
 }
 .scroll-bar .thumb {
-    -fx-background-color: #D1D5DB;
+    -fx-background-color: #D4D4D8;
     -fx-background-radius: 999;
 }
 .scroll-bar .thumb:hover {
-    -fx-background-color: #9CA3AF;
+    -fx-background-color: #A1A1AA;
 }
 .scroll-bar .increment-button,
 .scroll-bar .decrement-button {
@@ -50,87 +51,170 @@
     -fx-padding: 0;
 }
 
-/* ── Serko Horizon Gradients ──────────────────────────────────── */
+/* ── Serko Public Surface Gradients ───────────────────────────── */
+/* Matches live .u-gradient-bg-1: Calm icy sky upper ~60%, warm peach sunset strictly along bottom horizon */
 .serko-hero-bg {
     -fx-background-color:
-        radial-gradient(focus-angle 0deg, focus-distance 0%, center 50% 100%, radius 95%,
-            #FF8C51 0%, #FF897F 8%, #F489AD 18%, #E388F2 30%, #96CBFA 52%, #CFE6FC 70%, #E5F2FF 86%, #FFFFFF 100%),
-        linear-gradient(to bottom, #E5F2FF 0%, transparent 18%);
-}
-.serko-cta-bg {
-    -fx-background-color:
-        radial-gradient(focus-angle 0deg, focus-distance 0%, center 50% 110%, radius 95%,
-            #E388F2 0%, #96CBFA 34%, #CFE6FC 66%, #E5F2FF 100%),
-        linear-gradient(to bottom, #FFFFFF 0%, transparent 25%);
+        radial-gradient(focus-angle 0deg, focus-distance 0%, center 50% 104%, radius 68%,
+            #FF8C51 0%, #FF897F 10%, #F489AD 20%, #E388F2 31%, #96CBFA 52%, #CFE6FC 72%, #E5F2FF 90%),
+        linear-gradient(to bottom, #E5F2FF 0%, #E5F2FF 48%, transparent 72%);
 }
 
-/* ── Serko Pill Buttons ───────────────────────────────────────── */
+/* Matches live /platform centered soft sky radial halo feathered cleanly into #FFFFFF */
+.serko-platform-halo-bg {
+    -fx-background-color:
+        radial-gradient(center 50% 62%, radius 46%,
+            #96CBFA 0%, #CFE6FC 36%, #E5F2FF 64%, #FFFFFF 94%),
+        #FFFFFF;
+}
+
+/* Matches live Feature 4 soft sky-to-periwinkle section wash */
+.serko-feature4-bg {
+    -fx-background-color:
+        linear-gradient(to bottom, #FFFFFF 0%, #EDF5FE 24%, #DFECFD 60%, #C8CEFA 100%);
+}
+
+/* Matches live closing CTA horizon band */
+.serko-cta-bg {
+    -fx-background-color:
+        radial-gradient(focus-angle 0deg, focus-distance 0%, center 50% 108%, radius 78%,
+            #E388F2 0%, #96CBFA 38%, #CFE6FC 70%, #E5F2FF 90%),
+        linear-gradient(to bottom, #FFFFFF 0%, transparent 24%);
+}
+
+/* ── Serko Public Buttons & Navigation ────────────────────────── */
 .serko-btn-black {
     -fx-background-color: #000000;
     -fx-text-fill: #FFFFFF;
-    -fx-font-weight: 600;
+    -fx-font-weight: 500;
     -fx-font-size: 13.5px;
     -fx-background-radius: 999;
     -fx-padding: 10 22;
     -fx-cursor: hand;
 }
 .serko-btn-black:hover {
-    -fx-background-color: #262626;
+    -fx-background-color: #242424;
 }
+
 .serko-btn-white {
-    -fx-background-color: rgba(255, 255, 255, 0.78);
+    -fx-background-color: rgba(255, 255, 255, 0.56);
     -fx-text-fill: #000000;
-    -fx-font-weight: 600;
+    -fx-font-weight: 500;
     -fx-font-size: 13.5px;
     -fx-background-radius: 999;
-    -fx-border-color: rgba(0, 0, 0, 0.10);
+    -fx-border-color: rgba(255, 255, 255, 0.85);
     -fx-border-radius: 999;
     -fx-border-width: 1;
-    -fx-padding: 10 22;
+    -fx-padding: 10 20;
     -fx-cursor: hand;
 }
 .serko-btn-white:hover {
     -fx-background-color: #FFFFFF;
-    -fx-border-color: rgba(0, 0, 0, 0.22);
+    -fx-border-color: rgba(0, 0, 0, 0.14);
 }
-.serko-btn-rainbow {
+
+/* Matches Serko top-right "Join waitlist >" rainbow-ringed pill */
+.serko-btn-tertiary {
     -fx-background-color:
-        linear-gradient(to bottom left, #1B98F2, #CF69E0, #F56293, #FF635C, #FF8C51),
-        #FFFFFF;
-    -fx-background-insets: 0, 2;
+        linear-gradient(to right, #FF8C51, #F56293, #CF69E0, #1B98F2),
+        rgba(255, 255, 255, 0.82);
+    -fx-background-insets: 0, 1.5;
     -fx-background-radius: 999, 999;
     -fx-text-fill: #000000;
-    -fx-font-weight: 600;
+    -fx-font-weight: 500;
     -fx-font-size: 13.5px;
-    -fx-padding: 10 22;
+    -fx-padding: 8 18;
+    -fx-cursor: hand;
+}
+.serko-btn-tertiary:hover {
+    -fx-background-color:
+        linear-gradient(to right, #FF8C51, #F56293, #CF69E0, #1B98F2),
+        #FFFFFF;
+}
+
+.serko-btn-rainbow {
+    -fx-background-color:
+        linear-gradient(to right, #FF8C51, #F56293, #CF69E0, #1B98F2),
+        #FFFFFF;
+    -fx-background-insets: 0, 1.5;
+    -fx-background-radius: 999, 999;
+    -fx-text-fill: #000000;
+    -fx-font-weight: 500;
+    -fx-font-size: 13.5px;
+    -fx-padding: 9 20;
     -fx-cursor: hand;
 }
 .serko-btn-rainbow:hover {
     -fx-background-color:
-        linear-gradient(to bottom left, #1B98F2, #CF69E0, #F56293, #FF635C, #FF8C51),
+        linear-gradient(to right, #FF8C51, #F56293, #CF69E0, #1B98F2),
         #F8FAFC;
-    -fx-effect: dropshadow(gaussian, rgba(207, 105, 224, 0.28), 16, 0, 0, 4);
 }
+
 .serko-nav-link {
     -fx-background-color: transparent;
-    -fx-text-fill: #3F3F46;
+    -fx-text-fill: #27272A;
     -fx-font-size: 13.5px;
-    -fx-font-weight: 500;
-    -fx-padding: 8 14;
-    -fx-background-radius: 999;
+    -fx-font-weight: 400;
+    -fx-padding: 7 12;
+    -fx-background-radius: 8;
     -fx-cursor: hand;
 }
 .serko-nav-link:hover {
-    -fx-background-color: rgba(0, 0, 0, 0.05);
+    -fx-background-color: rgba(0, 0, 0, 0.045);
     -fx-text-fill: #000000;
 }
 .serko-nav-link-active {
-    -fx-background-color: rgba(0, 0, 0, 0.06);
+    -fx-background-color: rgba(255, 255, 255, 0.72);
     -fx-text-fill: #000000;
-    -fx-font-weight: 700;
+    -fx-font-weight: 500;
 }
 
-/* ── TableView (Light Editorial Style) ────────────────────────── */
+/* ── Operate Inside Workspace Controls ────────────────────────── */
+.ws-btn-primary {
+    -fx-background-color: #09090B;
+    -fx-text-fill: #FFFFFF;
+    -fx-font-weight: 500;
+    -fx-font-size: 13px;
+    -fx-background-radius: 8;
+    -fx-padding: 8 15;
+    -fx-cursor: hand;
+}
+.ws-btn-primary:hover {
+    -fx-background-color: #27272A;
+}
+
+.ws-btn-secondary {
+    -fx-background-color: #FFFFFF;
+    -fx-text-fill: #18181B;
+    -fx-font-weight: 500;
+    -fx-font-size: 13px;
+    -fx-background-radius: 8;
+    -fx-border-color: #D4D4D8;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 7.5 14;
+    -fx-cursor: hand;
+}
+.ws-btn-secondary:hover {
+    -fx-background-color: #F4F4F5;
+    -fx-border-color: #A1A1AA;
+}
+
+.ws-btn-ghost {
+    -fx-background-color: transparent;
+    -fx-text-fill: #52525B;
+    -fx-font-weight: 500;
+    -fx-font-size: 12.5px;
+    -fx-background-radius: 8;
+    -fx-padding: 6 10;
+    -fx-cursor: hand;
+}
+.ws-btn-ghost:hover {
+    -fx-background-color: #F4F4F5;
+    -fx-text-fill: #09090B;
+}
+
+/* ── TableView (Operate Hairline Density) ─────────────────────── */
 .table-view {
     -fx-background-color: #FFFFFF;
     -fx-border-color: transparent;
@@ -138,19 +222,19 @@
     -fx-padding: 0;
 }
 .table-view .column-header-background {
-    -fx-background-color: #F6F6F6;
+    -fx-background-color: #FAFAFA;
     -fx-border-color: transparent transparent #EAEAEA transparent;
     -fx-border-width: 0 0 1 0;
 }
 .table-view .column-header {
     -fx-background-color: transparent;
     -fx-border-color: transparent;
-    -fx-padding: 11 14;
+    -fx-padding: 10 14;
 }
 .table-view .column-header .label {
-    -fx-text-fill: #6B7280;
-    -fx-font-size: 11px;
-    -fx-font-weight: bold;
+    -fx-text-fill: #71717A;
+    -fx-font-size: 11.5px;
+    -fx-font-weight: 500;
     -fx-alignment: CENTER-LEFT;
 }
 .table-view .column-header:last-child {
@@ -158,19 +242,19 @@
 }
 .table-row-cell {
     -fx-background-color: #FFFFFF;
-    -fx-border-color: transparent transparent #F1F1F4 transparent;
+    -fx-border-color: transparent transparent #F4F4F5 transparent;
     -fx-border-width: 0 0 1 0;
-    -fx-cell-size: 48px;
+    -fx-cell-size: 46px;
 }
 .table-row-cell:hover {
-    -fx-background-color: #F8FAFC;
+    -fx-background-color: #FAFAFA;
 }
 .table-row-cell:selected {
-    -fx-background-color: #E8F3FE;
-    -fx-border-color: transparent transparent #CFE6FC transparent;
+    -fx-background-color: #EFF6FF;
+    -fx-border-color: transparent transparent #DBEAFE transparent;
 }
 .table-row-cell .table-cell {
-    -fx-text-fill: #111827;
+    -fx-text-fill: #18181B;
     -fx-font-size: 13px;
     -fx-border-color: transparent;
     -fx-padding: 0 14;
@@ -178,7 +262,7 @@
 }
 .table-view .filler,
 .table-view .corner {
-    -fx-background-color: #F6F6F6;
+    -fx-background-color: #FAFAFA;
 }
 .table-view .column-header .arrow {
     -fx-background-color: #1B98F2;
@@ -187,43 +271,43 @@
     -fx-padding: 3;
 }
 
-/* ── TextField / PasswordField / TextArea ─────────────────────── */
+/* ── TextField / PasswordField / TextArea (Crisp 8px Control Radius) ── */
 .text-field, .password-field {
-    -fx-background-color: #F6F6F6;
-    -fx-text-fill: #000000;
-    -fx-prompt-text-fill: #9CA3AF;
-    -fx-border-color: #E5E7EB;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-    -fx-padding: 10 14;
+    -fx-background-color: #FFFFFF;
+    -fx-text-fill: #09090B;
+    -fx-prompt-text-fill: #A1A1AA;
+    -fx-border-color: #E4E4E7;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 9 12;
     -fx-font-size: 13.5px;
-    -fx-highlight-fill: #CFE6FC;
-    -fx-highlight-text-fill: #000000;
+    -fx-highlight-fill: #DBEAFE;
+    -fx-highlight-text-fill: #09090B;
 }
 .text-field:focused, .password-field:focused {
     -fx-border-color: #1B98F2;
     -fx-background-color: #FFFFFF;
-    -fx-effect: dropshadow(gaussian, rgba(27, 152, 242, 0.18), 10, 0, 0, 0);
 }
+
 .text-area {
-    -fx-background-color: #F6F6F6;
-    -fx-text-fill: #111827;
-    -fx-prompt-text-fill: #9CA3AF;
-    -fx-border-color: #E5E7EB;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
+    -fx-background-color: #FFFFFF;
+    -fx-text-fill: #18181B;
+    -fx-prompt-text-fill: #A1A1AA;
+    -fx-border-color: #E4E4E7;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-border-width: 1;
     -fx-font-size: 13px;
-    -fx-padding: 4;
+    -fx-padding: 2;
 }
 .text-area .content {
-    -fx-background-color: #F6F6F6;
-    -fx-background-radius: 10;
-    -fx-padding: 10 14;
+    -fx-background-color: #FFFFFF;
+    -fx-background-radius: 7;
+    -fx-padding: 9 12;
 }
 .text-area:focused {
     -fx-border-color: #1B98F2;
-    -fx-background-color: #FFFFFF;
-    -fx-effect: dropshadow(gaussian, rgba(27, 152, 242, 0.16), 10, 0, 0, 0);
 }
 .text-area:focused .content {
     -fx-background-color: #FFFFFF;
@@ -231,50 +315,50 @@
 
 /* ── ComboBox ─────────────────────────────────────────────────── */
 .combo-box {
-    -fx-background-color: #F6F6F6;
-    -fx-border-color: #E5E7EB;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-    -fx-padding: 4 10;
-    -fx-font-size: 13.5px;
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: #E4E4E7;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 3 8;
+    -fx-font-size: 13px;
 }
 .combo-box .label {
-    -fx-text-fill: #000000;
+    -fx-text-fill: #18181B;
 }
 .combo-box .arrow-button {
     -fx-background-color: transparent;
-    -fx-padding: 0 8;
+    -fx-padding: 0 6;
 }
 .combo-box .arrow {
-    -fx-background-color: #6B7280;
+    -fx-background-color: #71717A;
     -fx-shape: "M 0 0 L 4 4 L 8 0 Z";
     -fx-scale-shape: false;
     -fx-padding: 3;
 }
 .combo-box:focused {
     -fx-border-color: #1B98F2;
-    -fx-background-color: #FFFFFF;
 }
 .combo-box-popup .list-view {
     -fx-background-color: #FFFFFF;
-    -fx-border-color: #E5E7EB;
-    -fx-border-radius: 12;
-    -fx-background-radius: 12;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 24, 0, 0, 8);
+    -fx-border-color: #E4E4E7;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.10), 16, 0, 0, 4);
 }
 .combo-box-popup .list-cell {
     -fx-background-color: transparent;
-    -fx-text-fill: #111827;
-    -fx-padding: 9 14;
+    -fx-text-fill: #18181B;
+    -fx-padding: 8 12;
     -fx-font-size: 13px;
 }
 .combo-box-popup .list-cell:hover {
-    -fx-background-color: #F6F6F6;
+    -fx-background-color: #F4F4F5;
 }
 .combo-box-popup .list-cell:selected {
-    -fx-background-color: #E8F3FE;
-    -fx-text-fill: #000000;
-    -fx-font-weight: bold;
+    -fx-background-color: #EFF6FF;
+    -fx-text-fill: #09090B;
+    -fx-font-weight: 500;
 }
 
 /* ── Button base ──────────────────────────────────────────────── */
@@ -289,47 +373,47 @@
 
 /* ── Tooltip & Dialog ─────────────────────────────────────────── */
 .tooltip {
-    -fx-background-color: #000000;
+    -fx-background-color: #09090B;
     -fx-text-fill: #FFFFFF;
     -fx-font-size: 12px;
-    -fx-background-radius: 8;
-    -fx-padding: 6 12;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 12, 0, 0, 4);
+    -fx-background-radius: 6;
+    -fx-padding: 5 10;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.16), 10, 0, 0, 3);
 }
 .dialog-pane {
     -fx-background-color: #FFFFFF;
-    -fx-border-color: #E5E7EB;
+    -fx-border-color: #EAEAEA;
 }
 .dialog-pane .header-panel {
-    -fx-background-color: #F6F6F6;
+    -fx-background-color: #FAFAFA;
 }
 .dialog-pane .label {
-    -fx-text-fill: #111827;
+    -fx-text-fill: #18181B;
 }
 .dialog-pane .button-bar .button {
-    -fx-background-color: #F6F6F6;
-    -fx-text-fill: #000000;
-    -fx-border-color: #E5E7EB;
-    -fx-border-radius: 999;
-    -fx-background-radius: 999;
-    -fx-padding: 8 20;
+    -fx-background-color: #FFFFFF;
+    -fx-text-fill: #18181B;
+    -fx-border-color: #D4D4D8;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 7 16;
 }
 .dialog-pane .button-bar .button:hover {
-    -fx-background-color: #EAEAEA;
+    -fx-background-color: #F4F4F5;
 }
 
-/* ── ProgressBar ──────────────────────────────────────────────── */
+/* ── ProgressBar (Clean 4px radius, Single Accent) ────────────── */
 .progress-bar {
-    -fx-background-color: #EAEAEA;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
+    -fx-background-color: #F4F4F5;
+    -fx-background-radius: 4;
+    -fx-border-radius: 4;
 }
 .progress-bar .bar {
-    -fx-background-color: linear-gradient(to right, #1B98F2, #CF69E0, #FF8C51);
-    -fx-background-radius: 999;
+    -fx-background-color: #1B98F2;
+    -fx-background-radius: 4;
     -fx-background-insets: 0;
 }
 .progress-bar .track {
-    -fx-background-color: #F1F1F4;
-    -fx-background-radius: 999;
+    -fx-background-color: #F4F4F5;
+    -fx-background-radius: 4;
 }

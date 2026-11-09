@@ -13,6 +13,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
@@ -26,7 +27,7 @@ import javafx.scene.paint.Color;
 import javafx.util.Duration;
 
 /**
- * Serko-aligned Light Editorial + Horizon Glow Authentication Screen.
+ * Calm Light Editorial Authentication Screen.
  * Supports Sign In and Register backed by /api/login and /api/register.
  */
 public class LoginView extends StackPane {
@@ -38,6 +39,7 @@ public class LoginView extends StackPane {
     private TextField txtFullName;
     private TextField txtEmail;
     private PasswordField txtPass;
+    private HBox statusBanner;
     private Label statusLbl;
     private Label cardHeading;
     private Label cardSubtitle;
@@ -66,7 +68,6 @@ public class LoginView extends StackPane {
         }
     }
 
-    // ── Serko Horizon Aura Backdrop ───────────────────────────────
     private void buildBackground() {
         getStyleClass().add("serko-hero-bg");
     }
@@ -76,59 +77,52 @@ public class LoginView extends StackPane {
 
         HBox topBar = new HBox(12);
         topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setPadding(new Insets(22, 32, 0, 32));
-        topBar.setMaxHeight(68);
-        StackPane.setAlignment(topBar, Pos.TOP_CENTER);
+        topBar.setPadding(new Insets(20, 28, 0, 28));
+        topBar.setMaxHeight(64);
+        StackPane.setAlignment(topBar, Pos.TOP_LEFT);
 
-        Button btnBack = new Button("←  Back to website");
-        btnBack.getStyleClass().add("serko-btn-white");
-        btnBack.setPadding(new Insets(8, 18, 8, 18));
+        Button btnBack = new Button("Back to website", UITheme.arrowLeftIcon(14, Color.web("#18181B")));
+        btnBack.setContentDisplay(ContentDisplay.LEFT);
+        btnBack.setGraphicTextGap(7);
+        btnBack.getStyleClass().add("ws-btn-secondary");
+        btnBack.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.78); -fx-text-fill: #18181B;" +
+            "-fx-border-color: rgba(0,0,0,0.09); -fx-border-radius: 8; -fx-background-radius: 8;" +
+            "-fx-font-size: 12.5px; -fx-font-weight: 500; -fx-padding: 7 13; -fx-cursor: hand;"
+        );
         btnBack.setOnAction(e -> onBackToHome.run());
 
-        Region sp = new Region();
-        HBox.setHgrow(sp, Priority.ALWAYS);
-
-        HBox chip = new HBox(8);
-        chip.setAlignment(Pos.CENTER);
-        chip.setPadding(new Insets(6, 14, 6, 14));
-        chip.setStyle("-fx-background-color: rgba(255,255,255,0.75); -fx-background-radius: 999;");
-        Label dot = new Label("●");
-        dot.setStyle("-fx-text-fill: " + UITheme.POS_DOT + "; -fx-font-size: 9px;");
-        Label apiLbl = new Label("Spring Boot Auth  ·  JWT");
-        apiLbl.setStyle("-fx-text-fill: #3F3F46; -fx-font-size: 12px; -fx-font-weight: 600;");
-        chip.getChildren().addAll(dot, apiLbl);
-
-        topBar.getChildren().addAll(btnBack, sp, chip);
+        topBar.getChildren().add(btnBack);
         getChildren().add(topBar);
     }
 
-    // ── Main Centered Card ────────────────────────────────────────
+    // ── Centered Crisp Card ──────────────────────────────────────
     private void buildCard() {
-        VBox card = new VBox(22);
-        card.setMaxWidth(450);
+        VBox card = new VBox(20);
+        card.setMaxWidth(424);
         card.setMaxHeight(Region.USE_PREF_SIZE);
-        card.setPadding(new Insets(34, 36, 32, 36));
+        card.setPadding(new Insets(30, 32, 28, 32));
         card.setStyle(
             "-fx-background-color: #FFFFFF;" +
-            "-fx-background-radius: 24;" +
-            "-fx-border-color: rgba(0, 0, 0, 0.06);" +
-            "-fx-border-radius: 24;" +
+            "-fx-background-radius: 14;" +
+            "-fx-border-color: " + UITheme.WS_BORDER + ";" +
+            "-fx-border-radius: 14;" +
             "-fx-border-width: 1;"
         );
 
         DropShadow shadow = new DropShadow();
-        shadow.setColor(Color.rgb(0, 0, 0, 0.08));
-        shadow.setRadius(42);
-        shadow.setOffsetY(14);
+        shadow.setColor(Color.rgb(0, 0, 0, 0.06));
+        shadow.setRadius(24);
+        shadow.setOffsetY(8);
         card.setEffect(shadow);
 
         card.getChildren().addAll(buildCardHeader(), buildCardBody());
 
         card.setOpacity(0);
-        card.setTranslateY(18);
-        FadeTransition ft = new FadeTransition(Duration.millis(420), card);
+        card.setTranslateY(12);
+        FadeTransition ft = new FadeTransition(Duration.millis(300), card);
         ft.setToValue(1);
-        TranslateTransition tt = new TranslateTransition(Duration.millis(420), card);
+        TranslateTransition tt = new TranslateTransition(Duration.millis(300), card);
         tt.setToY(0);
         ft.play();
         tt.play();
@@ -137,41 +131,38 @@ public class LoginView extends StackPane {
     }
 
     private VBox buildCardHeader() {
-        VBox header = new VBox(10);
+        VBox header = new VBox(8);
         header.setAlignment(Pos.CENTER_LEFT);
 
-        HBox brandRow = new HBox(10);
+        HBox brandRow = new HBox(8);
         brandRow.setAlignment(Pos.CENTER_LEFT);
-        StackPane logo = UITheme.brandLogoMark(24, false);
+        StackPane logo = UITheme.brandLogoMark(20, false);
         Label brand = new Label("IncidentIQ");
-        brand.setStyle("-fx-font-size: 17px; -fx-font-weight: bold; -fx-text-fill: #000000;");
-        Region sp = new Region();
-        HBox.setHgrow(sp, Priority.ALWAYS);
-        Label pill = UITheme.positiveBadge("AI Workspace");
-        brandRow.getChildren().addAll(logo, brand, sp, pill);
+        brand.setStyle("-fx-font-size: 15px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
+        brandRow.getChildren().addAll(logo, brand);
 
-        cardHeading = new Label("Welcome back");
-        cardHeading.setStyle("-fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: #000000;");
+        cardHeading = new Label("Sign in to IncidentIQ");
+        cardHeading.setStyle("-fx-font-size: 22px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
 
-        cardSubtitle = new Label("Sign in to investigate incidents and launch your 6-agent pipeline.");
+        cardSubtitle = new Label("Manage incidents and run multi-agent root cause analysis.");
         cardSubtitle.setWrapText(true);
-        cardSubtitle.setStyle("-fx-font-size: 13.5px; -fx-text-fill: rgba(0,0,0,0.65);");
+        cardSubtitle.setStyle("-fx-font-size: 13.5px; -fx-text-fill: #52525B;");
 
         header.getChildren().addAll(brandRow, cardHeading, cardSubtitle);
         return header;
     }
 
     private VBox buildCardBody() {
-        VBox body = new VBox(15);
+        VBox body = new VBox(14);
 
-        // Segmented Pill Switcher (#F6F6F6 track)
+        // Flat 8px Segmented Mode Switcher
         HBox tabs = new HBox(4);
         tabs.setStyle(
-            "-fx-background-color: #F6F6F6;" +
-            "-fx-background-radius: 999;" +
-            "-fx-padding: 4;"
+            "-fx-background-color: #F4F4F5;" +
+            "-fx-background-radius: 8;" +
+            "-fx-padding: 3;"
         );
-        tabLogin = styledTabBtn("Sign In", true);
+        tabLogin = styledTabBtn("Sign in", true);
         tabReg   = styledTabBtn("Register", false);
         HBox.setHgrow(tabLogin, Priority.ALWAYS);
         HBox.setHgrow(tabReg, Priority.ALWAYS);
@@ -182,50 +173,57 @@ public class LoginView extends StackPane {
         // Full Name (Register mode)
         txtFullName = new TextField();
         txtFullName.setPromptText("Alex Morgan");
-        fullNameBox = UITheme.formField("Full Name", txtFullName);
+        fullNameBox = UITheme.formField("Full name", txtFullName);
         fullNameBox.setVisible(false);
         fullNameBox.setManaged(false);
 
         // Email
         txtEmail = new TextField();
         txtEmail.setPromptText("engineer@company.com");
-        VBox emailBox = UITheme.formField("Work Email", txtEmail);
+        VBox emailBox = UITheme.formField("Work email", txtEmail);
 
         // Password
         txtPass = new PasswordField();
         txtPass.setPromptText("••••••••");
         VBox passBox = UITheme.formFieldHint("Password", "(min 6 chars)", txtPass);
 
-        // Inline Error / Feedback Banner
+        // Inline Validation Banner with SVG Alert Icon
+        statusBanner = new HBox(8);
+        statusBanner.setAlignment(Pos.CENTER_LEFT);
+        statusBanner.setPadding(new Insets(9, 12, 9, 12));
+        statusBanner.setStyle(
+            "-fx-background-color: #FEF2F2; -fx-border-color: #FECACA; -fx-border-radius: 8; -fx-background-radius: 8;"
+        );
         statusLbl = new Label("");
         statusLbl.setWrapText(true);
-        statusLbl.setManaged(false);
-        statusLbl.setVisible(false);
+        statusLbl.setStyle("-fx-text-fill: #991B1B; -fx-font-size: 12.5px; -fx-font-weight: 500;");
+        statusBanner.getChildren().addAll(UITheme.alertIcon(15, Color.web("#DC2626")), statusLbl);
+        statusBanner.setVisible(false);
+        statusBanner.setManaged(false);
 
-        // Black Serko Primary Pill
-        btnPrimary = UITheme.serkoBlackPill("Sign In", true);
+        // Primary 8px Action Button
+        btnPrimary = UITheme.wsPrimaryBtn("Sign in", null);
         btnPrimary.setMaxWidth(Double.MAX_VALUE);
-        btnPrimary.setPrefHeight(46);
+        btnPrimary.setPrefHeight(40);
 
-        // Secondary mode switch link
-        btnToggle = new Button("Don't have an account? Register");
+        btnToggle = new Button("Need an account? Register");
         btnToggle.setStyle(
             "-fx-background-color: transparent;" +
-            "-fx-text-fill: #4D4D4D;" +
+            "-fx-text-fill: #52525B;" +
             "-fx-font-size: 12.5px;" +
-            "-fx-font-weight: 600;" +
+            "-fx-font-weight: 500;" +
             "-fx-cursor: hand;"
         );
         btnToggle.setMaxWidth(Double.MAX_VALUE);
         btnToggle.setOnMouseEntered(e -> btnToggle.setStyle(
-            "-fx-background-color: transparent; -fx-text-fill: #000000; -fx-font-size: 12.5px; -fx-font-weight: 600; -fx-underline: true; -fx-cursor: hand;"
+            "-fx-background-color: transparent; -fx-text-fill: #09090B; -fx-font-size: 12.5px; -fx-font-weight: 500; -fx-underline: true; -fx-cursor: hand;"
         ));
         btnToggle.setOnMouseExited(e -> btnToggle.setStyle(
-            "-fx-background-color: transparent; -fx-text-fill: #4D4D4D; -fx-font-size: 12.5px; -fx-font-weight: 600; -fx-cursor: hand;"
+            "-fx-background-color: transparent; -fx-text-fill: #52525B; -fx-font-size: 12.5px; -fx-font-weight: 500; -fx-cursor: hand;"
         ));
 
         body.getChildren().addAll(
-            tabs, fullNameBox, emailBox, passBox, statusLbl, btnPrimary, btnToggle
+            tabs, fullNameBox, emailBox, passBox, statusBanner, btnPrimary, btnToggle
         );
 
         tabLogin.setOnAction(e -> switchMode(false));
@@ -253,29 +251,28 @@ public class LoginView extends StackPane {
         if (active) {
             btn.setStyle(
                 "-fx-background-color: #FFFFFF;" +
-                "-fx-text-fill: #000000;" +
-                "-fx-font-weight: bold;" +
-                "-fx-font-size: 13px;" +
-                "-fx-background-radius: 999;" +
-                "-fx-padding: 8 0;" +
+                "-fx-text-fill: #09090B;" +
+                "-fx-border-color: #E4E4E7;" +
+                "-fx-border-width: 1;" +
+                "-fx-border-radius: 6;" +
+                "-fx-font-weight: 500;" +
+                "-fx-font-size: 12.5px;" +
+                "-fx-background-radius: 6;" +
+                "-fx-padding: 6 0;" +
                 "-fx-cursor: hand;"
             );
-            DropShadow s = new DropShadow();
-            s.setColor(Color.rgb(0, 0, 0, 0.08));
-            s.setRadius(8);
-            s.setOffsetY(2);
-            btn.setEffect(s);
         } else {
             btn.setStyle(
                 "-fx-background-color: transparent;" +
                 "-fx-text-fill: #71717A;" +
-                "-fx-font-weight: 600;" +
-                "-fx-font-size: 13px;" +
-                "-fx-background-radius: 999;" +
-                "-fx-padding: 8 0;" +
+                "-fx-border-color: transparent;" +
+                "-fx-border-width: 1;" +
+                "-fx-font-weight: 400;" +
+                "-fx-font-size: 12.5px;" +
+                "-fx-background-radius: 6;" +
+                "-fx-padding: 6 0;" +
                 "-fx-cursor: hand;"
             );
-            btn.setEffect(null);
         }
     }
 
@@ -285,14 +282,14 @@ public class LoginView extends StackPane {
         applyTabStyle(tabReg, toRegister);
         fullNameBox.setVisible(toRegister);
         fullNameBox.setManaged(toRegister);
-        cardHeading.setText(toRegister ? "Create workspace" : "Welcome back");
+        cardHeading.setText(toRegister ? "Create workspace account" : "Sign in to IncidentIQ");
         cardSubtitle.setText(toRegister
             ? "Create an engineering account to report incidents and run AI triage."
-            : "Sign in to investigate incidents and launch your 6-agent pipeline.");
-        btnPrimary.setText(toRegister ? "Create Account" : "Sign In");
+            : "Manage incidents and run multi-agent root cause analysis.");
+        btnPrimary.setText(toRegister ? "Create account" : "Sign in");
         btnToggle.setText(toRegister
-            ? "Already have an account? Sign In"
-            : "Don't have an account? Register");
+            ? "Already have an account? Sign in"
+            : "Need an account? Register");
         hideStatus();
     }
 
@@ -305,7 +302,7 @@ public class LoginView extends StackPane {
             return;
         }
 
-        setLoading(true, "Sign In");
+        setLoading(true, "Sign in");
         new Thread(() -> {
             try {
                 HttpResponse<String> res = ApiClient.login(email, pass);
@@ -313,17 +310,17 @@ public class LoginView extends StackPane {
                     JsonNode node = mapper.readTree(res.body());
                     ApiClient.setAuth(node.path("token").asText(), email);
                     Platform.runLater(() -> {
-                        setLoading(false, "Sign In");
+                        setLoading(false, "Sign in");
                         onLoginSuccess.run();
                     });
                 } else {
                     String msg = extractMessage(res.body(), "Invalid credentials (" + res.statusCode() + ")");
-                    Platform.runLater(() -> { showError(msg); setLoading(false, "Sign In"); });
+                    Platform.runLater(() -> { showError(msg); setLoading(false, "Sign in"); });
                 }
             } catch (Exception ex) {
                 Platform.runLater(() -> {
                     showError("Cannot reach Spring Boot backend at http://localhost:8080.");
-                    setLoading(false, "Sign In");
+                    setLoading(false, "Sign in");
                 });
             }
         }).start();
@@ -342,7 +339,7 @@ public class LoginView extends StackPane {
             return;
         }
 
-        setLoading(true, "Create Account");
+        setLoading(true, "Create account");
         new Thread(() -> {
             try {
                 HttpResponse<String> res = ApiClient.register(fullName, email, pass);
@@ -350,17 +347,17 @@ public class LoginView extends StackPane {
                     JsonNode node = mapper.readTree(res.body());
                     ApiClient.setAuth(node.path("token").asText(), email);
                     Platform.runLater(() -> {
-                        setLoading(false, "Create Account");
+                        setLoading(false, "Create account");
                         onLoginSuccess.run();
                     });
                 } else {
                     String msg = extractMessage(res.body(), "Registration failed (" + res.statusCode() + ")");
-                    Platform.runLater(() -> { showError(msg); setLoading(false, "Create Account"); });
+                    Platform.runLater(() -> { showError(msg); setLoading(false, "Create account"); });
                 }
             } catch (Exception ex) {
                 Platform.runLater(() -> {
                     showError("Cannot reach Spring Boot backend at http://localhost:8080.");
-                    setLoading(false, "Create Account");
+                    setLoading(false, "Create account");
                 });
             }
         }).start();
@@ -372,24 +369,14 @@ public class LoginView extends StackPane {
     }
 
     private void showError(String msg) {
-        statusLbl.setText("⚠  " + msg);
-        statusLbl.setStyle(
-            "-fx-text-fill: #B91C1C;" +
-            "-fx-font-size: 12.5px;" +
-            "-fx-font-weight: 600;" +
-            "-fx-background-color: #FEE2E2;" +
-            "-fx-border-color: #FECACA;" +
-            "-fx-border-radius: 12;" +
-            "-fx-padding: 10 14;" +
-            "-fx-background-radius: 12;"
-        );
-        statusLbl.setVisible(true);
-        statusLbl.setManaged(true);
+        statusLbl.setText(msg);
+        statusBanner.setVisible(true);
+        statusBanner.setManaged(true);
     }
 
     private void hideStatus() {
-        statusLbl.setVisible(false);
-        statusLbl.setManaged(false);
+        statusBanner.setVisible(false);
+        statusBanner.setManaged(false);
     }
 
     private String extractMessage(String body, String fallback) {

@@ -10,15 +10,15 @@
     overflow: hidden;
     user-select: none;
     background:
-      linear-gradient(to bottom, #E5F2FF 0%, rgba(229,242,255,0) 14%),
-      radial-gradient(ellipse 220% 100% at 50% 100%,
+      linear-gradient(to bottom, #E5F2FF 0%, #E5F2FF 36%, rgba(229,242,255,0) 68%),
+      radial-gradient(ellipse 220% 88% at 50% 102%,
         #FF8C51 0%,
-        #FF897F 6%,
-        #F489AD 15%,
-        #E388F2 26%,
-        #96CBFA 46%,
-        #CFE6FC 62%,
-        #E5F2FF 78%,
+        #FF897F 9%,
+        #F489AD 18%,
+        #E388F2 30%,
+        #96CBFA 52%,
+        #CFE6FC 70%,
+        #E5F2FF 88%,
         #FFFFFF 100%
       );
   }
@@ -51,18 +51,41 @@
     }
   };
 
+  function getSphereGeometry() {
+    const cx = width * 0.5;
+    const cy = height * 0.74;
+    const radius = Math.max(240, Math.min(width * 0.36, height * 0.33));
+    return { cx, cy, radius };
+  }
+
   function rebuildAura(cx, cy, radius) {
     auraCanvas.width = Math.max(1, width);
     auraCanvas.height = Math.max(1, height);
     auraCtx.clearRect(0, 0, width, height);
-    const aura = auraCtx.createRadialGradient(cx, cy, radius * 0.25, cx, cy, radius * 1.32);
-    aura.addColorStop(0, 'rgba(255, 255, 255, 0.55)');
-    aura.addColorStop(0.55, 'rgba(207, 105, 224, 0.14)');
-    aura.addColorStop(0.85, 'rgba(255, 140, 81, 0.12)');
-    aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    auraCtx.fillStyle = aura;
+
+    // Outer soft atmospheric sky halo
+    const outer = auraCtx.createRadialGradient(cx, cy - radius * 0.15, radius * 0.4, cx, cy, radius * 1.18);
+    outer.addColorStop(0, 'rgba(255, 255, 255, 0.36)');
+    outer.addColorStop(0.55, 'rgba(150, 203, 250, 0.18)');
+    outer.addColorStop(0.85, 'rgba(207, 105, 224, 0.08)');
+    outer.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    auraCtx.fillStyle = outer;
     auraCtx.beginPath();
-    auraCtx.arc(cx, cy, radius * 1.32, 0, Math.PI * 2);
+    auraCtx.arc(cx, cy, radius * 1.18, 0, Math.PI * 2);
+    auraCtx.fill();
+
+    // Soft translucent glass sphere interior highlight matching live serko.ai dome
+    const inner = auraCtx.createRadialGradient(
+      cx, cy - radius * 0.32, radius * 0.06,
+      cx, cy, radius
+    );
+    inner.addColorStop(0, 'rgba(255, 255, 255, 0.42)');
+    inner.addColorStop(0.58, 'rgba(150, 203, 250, 0.22)');
+    inner.addColorStop(0.88, 'rgba(27, 152, 242, 0.10)');
+    inner.addColorStop(1, 'rgba(255, 255, 255, 0.02)');
+    auraCtx.fillStyle = inner;
+    auraCtx.beginPath();
+    auraCtx.arc(cx, cy, radius, 0, Math.PI * 2);
     auraCtx.fill();
   }
 
@@ -73,18 +96,16 @@
     canvas.width = Math.max(1, Math.floor(width * dpr));
     canvas.height = Math.max(1, Math.floor(height * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const cx = width * 0.5;
-    const cy = height * 0.62;
-    const radius = Math.min(width * 0.36, height * 0.52);
+    const { cx, cy, radius } = getSphereGeometry();
     rebuildAura(cx, cy, radius);
   }
   window.addEventListener('resize', resize);
   resize();
 
   const DEG = Math.PI / 180;
-  // Fibonacci sphere dots for subtle glowing lattice like serko.ai's WebGL hero globe
+  // Dense charcoal stippled surface dots along Fibonacci sphere (matches live serko.ai globe silhouette)
   const dots = [];
-  const N = 240;
+  const N = 520;
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < N; i++) {
     const y = 1 - (i / (N - 1)) * 2;
@@ -93,18 +114,17 @@
     dots.push({ x: Math.cos(theta) * r, y: y, z: Math.sin(theta) * r });
   }
 
-  // Simulated distributed telemetry hubs & routes
   const hubs = [
-    { name: 'us-west', lat: 37.77, lon: -122.41, color: '#1B98F2' },
-    { name: 'us-east', lat: 40.71, lon: -74.00,  color: '#CF69E0' },
-    { name: 'eu-west', lat: 51.50, lon: -0.12,   color: '#F56293' },
-    { name: 'eu-cent', lat: 50.11, lon: 8.68,    color: '#FF635C' },
-    { name: 'ap-south',lat: 12.97, lon: 77.59,   color: '#FF8C51' },
-    { name: 'ap-east', lat: 35.67, lon: 139.65,  color: '#1B98F2' }
+    { lat: 37.77, lon: -122.41 },
+    { lat: 40.71, lon: -74.00  },
+    { lat: 51.50, lon: -0.12   },
+    { lat: 50.11, lon: 8.68    },
+    { lat: 12.97, lon: 77.59   },
+    { lat: 35.67, lon: 139.65  }
   ];
 
   const routes = [
-    [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [0, 4]
+    [0, 1], [1, 2], [2, 3], [3, 4], [4, 5]
   ];
 
   function latLonToVec(lat, lon) {
@@ -118,11 +138,9 @@
   }
 
   function rotateVec(v, rotY, rotX) {
-    // Rotate around Y
     const cy = Math.cos(rotY), sy = Math.sin(rotY);
     const x1 = v.x * cy - v.z * sy;
     const z1 = v.x * sy + v.z * cy;
-    // Tilt around X
     const cx = Math.cos(rotX), sx = Math.sin(rotX);
     const y2 = v.y * cx - z1 * sx;
     const z2 = v.y * sx + z1 * cx;
@@ -140,35 +158,31 @@
     }
     const dt = Math.min(0.08, (now - lastPaint) / 1000);
     lastPaint = now;
-    t += dt * 0.48;
+    t += dt * 0.32;
     ctx.clearRect(0, 0, width, height);
 
-    const cx = width * 0.5;
-    // Place sphere center slightly lower just like Serko's rising horizon globe
-    const cy = height * 0.62;
-    const radius = Math.min(width * 0.36, height * 0.52);
+    const { cx, cy, radius } = getSphereGeometry();
+    const rotY = t * 0.42;
+    const rotX = -0.28;
 
-    const rotY = t * 0.48;
-    const rotX = -0.32;
-
-    // 1. Cached atmospheric radial aura halo around globe
+    // 1. Atmospheric translucent glass sphere + soft sky aura
     ctx.drawImage(auraCanvas, 0, 0, width, height);
 
-    // 2. Crisp translucent outer rim ring
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = 1.6;
+    // 2. Subtle thin dark charcoal outer rim ring
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.28)';
+    ctx.lineWidth = 1.1;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.stroke();
 
-    // 3. Rotating latitude / longitude wireframe arcs
-    ctx.lineWidth = 1.05;
-    for (let lat = -60; lat <= 60; lat += 30) {
+    // 3. Delicate charcoal latitude / longitude wireframe arcs
+    ctx.lineWidth = 0.85;
+    for (let lat = -60; lat <= 75; lat += 15) {
       ctx.beginPath();
       let started = false;
-      for (let lon = -180; lon <= 180; lon += 10) {
+      for (let lon = -180; lon <= 180; lon += 8) {
         const p = rotateVec(latLonToVec(lat, lon), rotY, rotX);
-        if (p.z > -0.05) {
+        if (p.z > -0.02) {
           const sx = cx + p.x * radius;
           const sy = cy - p.y * radius;
           if (!started) { ctx.moveTo(sx, sy); started = true; }
@@ -177,14 +191,14 @@
           started = false;
         }
       }
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.14)';
       ctx.stroke();
     }
 
-    for (let lon = 0; lon < 180; lon += 30) {
+    for (let lon = 0; lon < 180; lon += 18) {
       ctx.beginPath();
       let started = false;
-      for (let a = 0; a <= 360; a += 10) {
+      for (let a = 0; a <= 360; a += 8) {
         const rad = a * DEG;
         const vec = {
           x: Math.cos(rad) * Math.cos(lon * DEG),
@@ -192,7 +206,7 @@
           z: Math.cos(rad) * Math.sin(lon * DEG)
         };
         const p = rotateVec(vec, rotY, rotX);
-        if (p.z > -0.05) {
+        if (p.z > -0.02) {
           const sx = cx + p.x * radius;
           const sy = cy - p.y * radius;
           if (!started) { ctx.moveTo(sx, sy); started = true; }
@@ -201,25 +215,25 @@
           started = false;
         }
       }
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.38)';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.11)';
       ctx.stroke();
     }
 
-    // 4. Fibonacci lattice micro-dots
+    // 4. Charcoal stippled surface dots matching Serko's WebGL globe
     for (let i = 0; i < dots.length; i++) {
       const p = rotateVec(dots[i], rotY, rotX);
-      if (p.z > -0.15) {
-        const alpha = Math.max(0.12, Math.min(0.85, (p.z + 0.15) * 0.72));
+      if (p.z > 0.02) {
+        const alpha = Math.max(0.18, Math.min(0.88, p.z * 0.92));
         const sx = cx + p.x * radius;
         const sy = cy - p.y * radius;
-        ctx.fillStyle = `rgba(27, 152, 242, ${alpha * 0.65})`;
+        ctx.fillStyle = `rgba(17, 24, 39, ${alpha})`;
         ctx.beginPath();
-        ctx.arc(sx, sy, p.z > 0.4 ? 1.8 : 1.2, 0, Math.PI * 2);
+        ctx.arc(sx, sy, p.z > 0.48 ? 1.35 : 0.95, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
-    // 5. Animated glowing telemetry arcs & traveling pulse packets between hubs
+    // 5. Restrained subtle dark + sky telemetry orbital paths
     routes.forEach((pair, idx) => {
       const va = latLonToVec(hubs[pair[0]].lat, hubs[pair[0]].lon);
       const vb = latLonToVec(hubs[pair[1]].lat, hubs[pair[1]].lon);
@@ -231,7 +245,7 @@
         let my = va.y * (1 - f) + vb.y * f;
         let mz = va.z * (1 - f) + vb.z * f;
         const len = Math.hypot(mx, my, mz) || 1;
-        const lift = 1 + Math.sin(f * Math.PI) * 0.18;
+        const lift = 1 + Math.sin(f * Math.PI) * 0.14;
         mx = (mx / len) * lift;
         my = (my / len) * lift;
         mz = (mz / len) * lift;
@@ -240,14 +254,14 @@
       }
 
       const midZ = pts[Math.floor(steps / 2)].z;
-      if (midZ > -0.25) {
+      if (midZ > 0.05) {
         const grad = ctx.createLinearGradient(pts[0].sx, pts[0].sy, pts[steps].sx, pts[steps].sy);
-        grad.addColorStop(0, 'rgba(27, 152, 242, 0.90)');
-        grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.95)');
-        grad.addColorStop(1, 'rgba(255, 140, 81, 0.92)');
+        grad.addColorStop(0, 'rgba(0, 0, 0, 0.22)');
+        grad.addColorStop(0.5, 'rgba(27, 152, 242, 0.42)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0.22)');
 
         ctx.strokeStyle = grad;
-        ctx.lineWidth = 2.2;
+        ctx.lineWidth = 1.25;
         ctx.beginPath();
         pts.forEach((pt, k) => {
           if (k === 0) ctx.moveTo(pt.sx, pt.sy);
@@ -255,39 +269,14 @@
         });
         ctx.stroke();
 
-        // Moving luminous packet orb along trajectory
-        const progress = ((t * 0.55 + idx * 0.21) % 1);
+        const progress = ((t * 0.65 + idx * 0.22) % 1);
         const orbPt = pts[Math.min(steps, Math.floor(progress * steps))];
-        if (orbPt && orbPt.z > -0.1) {
-          ctx.fillStyle = '#FFFFFF';
+        if (orbPt && orbPt.z > 0.1) {
+          ctx.fillStyle = 'rgba(27, 152, 242, 0.85)';
           ctx.beginPath();
-          ctx.arc(orbPt.sx, orbPt.sy, 3.8, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = 'rgba(27, 152, 242, 0.42)';
-          ctx.beginPath();
-          ctx.arc(orbPt.sx, orbPt.sy, 9.5, 0, Math.PI * 2);
+          ctx.arc(orbPt.sx, orbPt.sy, 2.2, 0, Math.PI * 2);
           ctx.fill();
         }
-      }
-    });
-
-    // 6. Hub node markers
-    hubs.forEach((h, idx) => {
-      const rp = rotateVec(latLonToVec(h.lat, h.lon), rotY, rotX);
-      if (rp.z > 0) {
-        const sx = cx + rp.x * radius;
-        const sy = cy - rp.y * radius;
-        const pulse = 5 + Math.sin(t * 4 + idx) * 2;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-        ctx.beginPath();
-        ctx.arc(sx, sy, pulse, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = h.color;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 3.2, 0, Math.PI * 2);
-        ctx.fill();
       }
     });
 
@@ -298,4 +287,3 @@
 </script>
 </body>
 </html>
-
