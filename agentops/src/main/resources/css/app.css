@@ -1,0 +1,335 @@
+/* ──────────────────────────────────────────────────────────────────
+   IncidentIQ – Global JavaFX Stylesheet (serko.ai Design System)
+   Light Editorial Canvas + Soft Frost Surfaces + Horizon Aura
+   ────────────────────────────────────────────────────────────────── */
+
+/* ── Root / Scene ─────────────────────────────────────────────── */
+.root {
+    -fx-font-family: "Plus Jakarta Sans", "Segoe UI", "Helvetica Neue", sans-serif;
+    -fx-font-size: 14px;
+    -fx-background-color: #FFFFFF;
+    -fx-text-fill: #000000;
+}
+
+/* ── ScrollPane & ScrollBar ───────────────────────────────────── */
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+.scroll-bar {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-pref-width: 8px;
+    -fx-pref-height: 8px;
+}
+.scroll-bar .track {
+    -fx-background-color: #F6F6F6;
+}
+.scroll-bar .thumb {
+    -fx-background-color: #D1D5DB;
+    -fx-background-radius: 999;
+}
+.scroll-bar .thumb:hover {
+    -fx-background-color: #9CA3AF;
+}
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-pref-height: 0;
+    -fx-pref-width: 0;
+}
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-shape: "";
+    -fx-padding: 0;
+}
+
+/* ── Serko Horizon Gradients ──────────────────────────────────── */
+.serko-hero-bg {
+    -fx-background-color:
+        radial-gradient(focus-angle 0deg, focus-distance 0%, center 50% 100%, radius 95%,
+            #FF8C51 0%, #FF897F 8%, #F489AD 18%, #E388F2 30%, #96CBFA 52%, #CFE6FC 70%, #E5F2FF 86%, #FFFFFF 100%),
+        linear-gradient(to bottom, #E5F2FF 0%, transparent 18%);
+}
+.serko-cta-bg {
+    -fx-background-color:
+        radial-gradient(focus-angle 0deg, focus-distance 0%, center 50% 110%, radius 95%,
+            #E388F2 0%, #96CBFA 34%, #CFE6FC 66%, #E5F2FF 100%),
+        linear-gradient(to bottom, #FFFFFF 0%, transparent 25%);
+}
+
+/* ── Serko Pill Buttons ───────────────────────────────────────── */
+.serko-btn-black {
+    -fx-background-color: #000000;
+    -fx-text-fill: #FFFFFF;
+    -fx-font-weight: 600;
+    -fx-font-size: 13.5px;
+    -fx-background-radius: 999;
+    -fx-padding: 10 22;
+    -fx-cursor: hand;
+}
+.serko-btn-black:hover {
+    -fx-background-color: #262626;
+}
+.serko-btn-white {
+    -fx-background-color: rgba(255, 255, 255, 0.78);
+    -fx-text-fill: #000000;
+    -fx-font-weight: 600;
+    -fx-font-size: 13.5px;
+    -fx-background-radius: 999;
+    -fx-border-color: rgba(0, 0, 0, 0.10);
+    -fx-border-radius: 999;
+    -fx-border-width: 1;
+    -fx-padding: 10 22;
+    -fx-cursor: hand;
+}
+.serko-btn-white:hover {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: rgba(0, 0, 0, 0.22);
+}
+.serko-btn-rainbow {
+    -fx-background-color:
+        linear-gradient(to bottom left, #1B98F2, #CF69E0, #F56293, #FF635C, #FF8C51),
+        #FFFFFF;
+    -fx-background-insets: 0, 2;
+    -fx-background-radius: 999, 999;
+    -fx-text-fill: #000000;
+    -fx-font-weight: 600;
+    -fx-font-size: 13.5px;
+    -fx-padding: 10 22;
+    -fx-cursor: hand;
+}
+.serko-btn-rainbow:hover {
+    -fx-background-color:
+        linear-gradient(to bottom left, #1B98F2, #CF69E0, #F56293, #FF635C, #FF8C51),
+        #F8FAFC;
+    -fx-effect: dropshadow(gaussian, rgba(207, 105, 224, 0.28), 16, 0, 0, 4);
+}
+.serko-nav-link {
+    -fx-background-color: transparent;
+    -fx-text-fill: #3F3F46;
+    -fx-font-size: 13.5px;
+    -fx-font-weight: 500;
+    -fx-padding: 8 14;
+    -fx-background-radius: 999;
+    -fx-cursor: hand;
+}
+.serko-nav-link:hover {
+    -fx-background-color: rgba(0, 0, 0, 0.05);
+    -fx-text-fill: #000000;
+}
+.serko-nav-link-active {
+    -fx-background-color: rgba(0, 0, 0, 0.06);
+    -fx-text-fill: #000000;
+    -fx-font-weight: 700;
+}
+
+/* ── TableView (Light Editorial Style) ────────────────────────── */
+.table-view {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: transparent;
+    -fx-table-cell-border-color: transparent;
+    -fx-padding: 0;
+}
+.table-view .column-header-background {
+    -fx-background-color: #F6F6F6;
+    -fx-border-color: transparent transparent #EAEAEA transparent;
+    -fx-border-width: 0 0 1 0;
+}
+.table-view .column-header {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 11 14;
+}
+.table-view .column-header .label {
+    -fx-text-fill: #6B7280;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-alignment: CENTER-LEFT;
+}
+.table-view .column-header:last-child {
+    -fx-border-color: transparent;
+}
+.table-row-cell {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: transparent transparent #F1F1F4 transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-cell-size: 48px;
+}
+.table-row-cell:hover {
+    -fx-background-color: #F8FAFC;
+}
+.table-row-cell:selected {
+    -fx-background-color: #E8F3FE;
+    -fx-border-color: transparent transparent #CFE6FC transparent;
+}
+.table-row-cell .table-cell {
+    -fx-text-fill: #111827;
+    -fx-font-size: 13px;
+    -fx-border-color: transparent;
+    -fx-padding: 0 14;
+    -fx-alignment: CENTER-LEFT;
+}
+.table-view .filler,
+.table-view .corner {
+    -fx-background-color: #F6F6F6;
+}
+.table-view .column-header .arrow {
+    -fx-background-color: #1B98F2;
+    -fx-shape: "M 0 -3.5 L 4 3.5 L -4 3.5 Z";
+    -fx-scale-shape: false;
+    -fx-padding: 3;
+}
+
+/* ── TextField / PasswordField / TextArea ─────────────────────── */
+.text-field, .password-field {
+    -fx-background-color: #F6F6F6;
+    -fx-text-fill: #000000;
+    -fx-prompt-text-fill: #9CA3AF;
+    -fx-border-color: #E5E7EB;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 10 14;
+    -fx-font-size: 13.5px;
+    -fx-highlight-fill: #CFE6FC;
+    -fx-highlight-text-fill: #000000;
+}
+.text-field:focused, .password-field:focused {
+    -fx-border-color: #1B98F2;
+    -fx-background-color: #FFFFFF;
+    -fx-effect: dropshadow(gaussian, rgba(27, 152, 242, 0.18), 10, 0, 0, 0);
+}
+.text-area {
+    -fx-background-color: #F6F6F6;
+    -fx-text-fill: #111827;
+    -fx-prompt-text-fill: #9CA3AF;
+    -fx-border-color: #E5E7EB;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-font-size: 13px;
+    -fx-padding: 4;
+}
+.text-area .content {
+    -fx-background-color: #F6F6F6;
+    -fx-background-radius: 10;
+    -fx-padding: 10 14;
+}
+.text-area:focused {
+    -fx-border-color: #1B98F2;
+    -fx-background-color: #FFFFFF;
+    -fx-effect: dropshadow(gaussian, rgba(27, 152, 242, 0.16), 10, 0, 0, 0);
+}
+.text-area:focused .content {
+    -fx-background-color: #FFFFFF;
+}
+
+/* ── ComboBox ─────────────────────────────────────────────────── */
+.combo-box {
+    -fx-background-color: #F6F6F6;
+    -fx-border-color: #E5E7EB;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 4 10;
+    -fx-font-size: 13.5px;
+}
+.combo-box .label {
+    -fx-text-fill: #000000;
+}
+.combo-box .arrow-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0 8;
+}
+.combo-box .arrow {
+    -fx-background-color: #6B7280;
+    -fx-shape: "M 0 0 L 4 4 L 8 0 Z";
+    -fx-scale-shape: false;
+    -fx-padding: 3;
+}
+.combo-box:focused {
+    -fx-border-color: #1B98F2;
+    -fx-background-color: #FFFFFF;
+}
+.combo-box-popup .list-view {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: #E5E7EB;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.12), 24, 0, 0, 8);
+}
+.combo-box-popup .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #111827;
+    -fx-padding: 9 14;
+    -fx-font-size: 13px;
+}
+.combo-box-popup .list-cell:hover {
+    -fx-background-color: #F6F6F6;
+}
+.combo-box-popup .list-cell:selected {
+    -fx-background-color: #E8F3FE;
+    -fx-text-fill: #000000;
+    -fx-font-weight: bold;
+}
+
+/* ── Button base ──────────────────────────────────────────────── */
+.button {
+    -fx-cursor: hand;
+    -fx-background-insets: 0;
+    -fx-border-insets: 0;
+}
+.button:focused {
+    -fx-background-insets: 0;
+}
+
+/* ── Tooltip & Dialog ─────────────────────────────────────────── */
+.tooltip {
+    -fx-background-color: #000000;
+    -fx-text-fill: #FFFFFF;
+    -fx-font-size: 12px;
+    -fx-background-radius: 8;
+    -fx-padding: 6 12;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 12, 0, 0, 4);
+}
+.dialog-pane {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: #E5E7EB;
+}
+.dialog-pane .header-panel {
+    -fx-background-color: #F6F6F6;
+}
+.dialog-pane .label {
+    -fx-text-fill: #111827;
+}
+.dialog-pane .button-bar .button {
+    -fx-background-color: #F6F6F6;
+    -fx-text-fill: #000000;
+    -fx-border-color: #E5E7EB;
+    -fx-border-radius: 999;
+    -fx-background-radius: 999;
+    -fx-padding: 8 20;
+}
+.dialog-pane .button-bar .button:hover {
+    -fx-background-color: #EAEAEA;
+}
+
+/* ── ProgressBar ──────────────────────────────────────────────── */
+.progress-bar {
+    -fx-background-color: #EAEAEA;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+}
+.progress-bar .bar {
+    -fx-background-color: linear-gradient(to right, #1B98F2, #CF69E0, #FF8C51);
+    -fx-background-radius: 999;
+    -fx-background-insets: 0;
+}
+.progress-bar .track {
+    -fx-background-color: #F1F1F4;
+    -fx-background-radius: 999;
+}

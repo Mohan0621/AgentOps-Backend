@@ -127,6 +127,11 @@
 			<artifactId>javafx-graphics</artifactId>
 			<version>21.0.2</version>
 		</dependency>
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-web</artifactId>
+			<version>21.0.2</version>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -135,6 +140,21 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+			<!-- JavaFX launcher: run with: mvnw.cmd compile exec:java -->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>3.3.0</version>
+				<configuration>
+					<mainClass>com.agentops.UI.Launcher</mainClass>
+					<addResourcesToClasspath>true</addResourcesToClasspath>
+					<jvmArgs>
+						<jvmArg>--add-modules</jvmArg>
+						<jvmArg>javafx.controls,javafx.fxml,javafx.graphics,javafx.web</jvmArg>
+					</jvmArgs>
+				</configuration>
+			</plugin>
+
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>

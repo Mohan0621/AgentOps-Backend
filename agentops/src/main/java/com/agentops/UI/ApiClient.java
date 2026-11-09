@@ -70,7 +70,14 @@ public class ApiClient {
     }
 
     public static HttpResponse<String> createIncident(String title, String description, String errorLogs, String severity) throws Exception {
-        var payload = new CreateIncidentPayload(title, description, errorLogs, severity, "OPEN", "APPLICATION_BUG");
+        return createIncident(title, description, errorLogs, severity, "OPEN", "APPLICATION_BUG");
+    }
+
+    public static HttpResponse<String> createIncident(String title, String description, String errorLogs,
+                                                      String severity, String status, String incidentType) throws Exception {
+        String finalType = (incidentType == null || incidentType.isBlank()) ? "APPLICATION_BUG" : incidentType.trim();
+        String finalStatus = (status == null || status.isBlank()) ? "OPEN" : status.trim();
+        var payload = new CreateIncidentPayload(title, description, errorLogs, severity, finalStatus, finalType);
         String json = objectMapper.writeValueAsString(payload);
 
         HttpRequest request = HttpRequest.newBuilder()
@@ -78,6 +85,26 @@ public class ApiClient {
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + jwtToken)
                 .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public static HttpResponse<String> updateIncidentStatus(Long incidentId, String status) throws Exception {
+        String json = objectMapper.writeValueAsString(new UpdateStatusPayload(status));
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/incidents/" + incidentId))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + jwtToken)
+                .PUT(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public static HttpResponse<String> getInvestigations(Long incidentId) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/incidents/" + incidentId + "/investigations"))
+                .header("Authorization", "Bearer " + jwtToken)
+                .GET()
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
@@ -112,5 +139,5 @@ public class ApiClient {
     public static record LoginPayload(String email, String password) {}
     public static record RegisterPayload(String fullName, String email, String password) {}
     public static record CreateIncidentPayload(String title, String description, String errorLogs, String severity, String status, String incidentType) {}
+    public static record UpdateStatusPayload(String status) {}
 }
-

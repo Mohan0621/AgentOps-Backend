@@ -3,111 +3,278 @@ package com.agentops.UI;
 import com.agentops.UI.Views.AnalyticsView;
 import com.agentops.UI.Views.IncidentsView;
 import com.agentops.UI.Views.LoginView;
+import com.agentops.UI.Views.PublicWebsiteView;
 import com.agentops.UI.Views.ReportIncidentView;
 import com.agentops.UI.Views.UITheme;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
 public class IncidentIqApp extends Application {
 
     private Stage primaryStage;
+    private Scene websiteScene;
     private Scene loginScene;
     private Scene mainScene;
 
-    // View Components
-    private IncidentsView incidentsView;
-    private ReportIncidentView reportIncidentView;
-    private AnalyticsView analyticsView;
+    private PublicWebsiteView  publicWebsiteView;
+    private LoginView          loginView;
+    private IncidentsView      incidentsView;
+    private ReportIncidentView reportView;
+    private AnalyticsView      analyticsView;
 
-    public static void main(String[] args) {
-        launch(args);
-    }
+    private StackPane contentArea;
+    private Button    navIncidents, navReport, navAnalytics;
+    private Label     userEmailLbl;
+
+    public static void main(String[] args) { launch(args); }
 
     @Override
     public void start(Stage stage) {
         this.primaryStage = stage;
-        primaryStage.setTitle("IncidentIQ - Autonomous Incident & Multi-Agent Investigation");
+        UITheme.loadFonts();
+        primaryStage.setTitle("IncidentIQ — AI-Powered Incident Management");
 
-        initViews();
+        incidentsView = new IncidentsView();
+        reportView    = new ReportIncidentView(
+            () -> {
+                incidentsView.refreshIncidents();
+                analyticsView.refreshDashboard();
+            },
+            () -> showTab("incidents")
+        );
+        analyticsView = new AnalyticsView();
 
-        this.loginScene = new Scene(new LoginView(this::onLoginSuccess));
-        this.mainScene = createMainDashboardScene();
+        publicWebsiteView = new PublicWebsiteView(this::openAuth, this::openWorkspace);
+        loginView         = new LoginView(this::onLoginSuccess, this::openPublicWebsite);
 
-        primaryStage.setScene(loginScene);
-        primaryStage.setWidth(1120);
-        primaryStage.setHeight(760);
+        websiteScene = new Scene(publicWebsiteView, 1320, 840);
+        loginScene   = new Scene(loginView, 1320, 840);
+        mainScene    = new Scene(buildMainLayout(), 1320, 840);
+
+        loadCss(websiteScene);
+        loadCss(loginScene);
+        loadCss(mainScene);
+
+        primaryStage.setScene(websiteScene);
+        primaryStage.setMinWidth(1020);
+        primaryStage.setMinHeight(680);
         primaryStage.show();
     }
 
-    private void initViews() {
-        this.incidentsView = new IncidentsView();
-        this.reportIncidentView = new ReportIncidentView(() -> {
-            incidentsView.refreshIncidents();
-            analyticsView.refreshDashboard();
-        });
-        this.analyticsView = new AnalyticsView();
+    private void loadCss(Scene scene) {
+        try {
+            String css = getClass().getResource("/css/app.css").toExternalForm();
+            scene.getStylesheets().add(css);
+        } catch (Exception e) {
+            System.err.println("Could not load CSS: " + e.getMessage());
+        }
+    }
+
+    private void openAuth(boolean registerMode) {
+        loginView.setRegisterMode(registerMode);
+        primaryStage.setScene(loginScene);
+    }
+
+    private void openPublicWebsite() {
+        publicWebsiteView.refreshAuthButtons(ApiClient.isAuthenticated());
+        primaryStage.setScene(websiteScene);
+    }
+
+    private void openWorkspace() {
+        if (ApiClient.isAuthenticated()) {
+            onLoginSuccess();
+        } else {
+            openAuth(false);
+        }
     }
 
     private void onLoginSuccess() {
+        String email = ApiClient.getCurrentUserEmail();
+        if (userEmailLbl != null) {
+            userEmailLbl.setText(email != null && !email.isBlank() ? email : "Signed in");
+        }
+        publicWebsiteView.refreshAuthButtons(true);
         primaryStage.setScene(mainScene);
+        showTab("incidents");
         incidentsView.refreshIncidents();
         analyticsView.refreshDashboard();
     }
 
-    private Scene createMainDashboardScene() {
+    // ── Inside Workspace Layout (Light Editorial Shell) ───────────
+    private BorderPane buildMainLayout() {
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: " + UITheme.BG_DARK + ";");
+        root.setStyle("-fx-background-color: #FFFFFF;");
+        root.setTop(buildTopNav());
 
-        // Top bar
-        HBox topBar = new HBox(15);
-        topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setPadding(new Insets(12, 20, 12, 20));
-        topBar.setStyle("-fx-background-color: " + UITheme.BG_TOP + "; -fx-border-color: #2b2b40; -fx-border-width: 0 0 1 0;");
+        contentArea = new StackPane();
+        contentArea.setStyle("-fx-background-color: #FFFFFF;");
+        contentArea.getChildren().addAll(incidentsView, reportView, analyticsView);
+        reportView.setVisible(false);
+        analyticsView.setVisible(false);
 
-        Label brand = new Label("IncidentIQ Console");
-        brand.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: " + UITheme.ACCENT_CYAN + ";");
+        root.setCenter(contentArea);
+        return root;
+    }
 
-        Label userGreeting = new Label("Session: Active (JWT Authenticated)");
-        userGreeting.setStyle("-fx-text-fill: " + UITheme.TEXT_MUTED + ";");
+    // ── Workspace Top Bar (Matches serko.ai Light Navigation) ─────
+    private VBox buildTopNav() {
+        VBox wrapper = new VBox(0);
+
+        HBox bar = new HBox(12);
+        bar.setAlignment(Pos.CENTER);
+        bar.setPrefHeight(66);
+        bar.setPadding(new Insets(0, 28, 0, 28));
+        bar.setStyle("-fx-background-color: #FFFFFF;");
+
+        // Left: Brand + Return to Public Website pill
+        HBox leftGroup = new HBox(12);
+        leftGroup.setAlignment(Pos.CENTER_LEFT);
+
+        HBox brand = new HBox(9);
+        brand.setAlignment(Pos.CENTER_LEFT);
+        brand.setCursor(Cursor.HAND);
+        brand.setOnMouseClicked(e -> showTab("incidents"));
+        StackPane brandMark = UITheme.brandLogoMark(22, false);
+        Label brandName = new Label("IncidentIQ");
+        brandName.setStyle("-fx-font-size: 16.5px; -fx-font-weight: bold; -fx-text-fill: #000000;");
+        brand.getChildren().addAll(brandMark, brandName);
+
+        Button btnWebsite = new Button("Website");
+        btnWebsite.getStyleClass().add("serko-nav-link");
+        btnWebsite.setStyle("-fx-background-color: #F6F6F6; -fx-text-fill: #4D4D4D; -fx-font-size: 12px; -fx-font-weight: 600; -fx-padding: 5 12; -fx-background-radius: 999;");
+        btnWebsite.setOnMouseEntered(e -> btnWebsite.setStyle("-fx-background-color: #EAEAEA; -fx-text-fill: #000000; -fx-font-size: 12px; -fx-font-weight: 600; -fx-padding: 5 12; -fx-background-radius: 999;"));
+        btnWebsite.setOnMouseExited(e -> btnWebsite.setStyle("-fx-background-color: #F6F6F6; -fx-text-fill: #4D4D4D; -fx-font-size: 12px; -fx-font-weight: 600; -fx-padding: 5 12; -fx-background-radius: 999;"));
+        btnWebsite.setOnAction(e -> openPublicWebsite());
+
+        leftGroup.getChildren().addAll(brand, btnWebsite);
+
+        // Center: Segmented Navigation Pills
+        HBox navTrack = new HBox(4);
+        navTrack.setAlignment(Pos.CENTER);
+        navTrack.setPadding(new Insets(4));
+        navTrack.setStyle("-fx-background-color: #F6F6F6; -fx-background-radius: 999;");
+
+        navIncidents = makeNavBtn("Incidents",       "incidents");
+        navReport    = makeNavBtn("Report Incident", "report");
+        navAnalytics = makeNavBtn("Analytics",       "analytics");
+        navTrack.getChildren().addAll(navIncidents, navReport, navAnalytics);
+
+        Region s1 = new Region(); HBox.setHgrow(s1, Priority.ALWAYS);
+        Region s2 = new Region(); HBox.setHgrow(s2, Priority.ALWAYS);
+
+        // Right: Live status badge + user pill + Sign Out
+        HBox rightGroup = new HBox(10);
+        rightGroup.setAlignment(Pos.CENTER_RIGHT);
+
+        Label liveBadge = UITheme.positiveBadge("●  Live API");
+
+        userEmailLbl = new Label("Engineer");
+        userEmailLbl.setStyle(
+            "-fx-background-color: #F6F6F6;" +
+            "-fx-text-fill: #3F3F46;" +
+            "-fx-font-size: 12px;" +
+            "-fx-font-weight: 600;" +
+            "-fx-padding: 5 12;" +
+            "-fx-background-radius: 999;"
+        );
 
         Button btnLogout = new Button("Sign Out");
-        btnLogout.setStyle("-fx-background-color: " + UITheme.COLOR_DANGER + "; -fx-text-fill: white;");
+        String logoutNormal = "-fx-background-color: rgba(255,255,255,0.85); -fx-text-fill: #000000; -fx-border-color: #E5E7EB; " +
+            "-fx-border-radius: 999; -fx-background-radius: 999; -fx-font-size: 12.5px; -fx-font-weight: 600; -fx-padding: 6 16; -fx-cursor: hand;";
+        String logoutHover = "-fx-background-color: #FEE2E2; -fx-text-fill: #B91C1C; -fx-border-color: #FECACA; " +
+            "-fx-border-radius: 999; -fx-background-radius: 999; -fx-font-size: 12.5px; -fx-font-weight: 600; -fx-padding: 6 16; -fx-cursor: hand;";
+        btnLogout.setStyle(logoutNormal);
+        btnLogout.setOnMouseEntered(e -> btnLogout.setStyle(logoutHover));
+        btnLogout.setOnMouseExited(e -> btnLogout.setStyle(logoutNormal));
         btnLogout.setOnAction(e -> {
             ApiClient.setAuth(null, null);
-            primaryStage.setScene(loginScene);
+            publicWebsiteView.refreshAuthButtons(false);
+            openPublicWebsite();
         });
 
-        HBox spacer = new HBox();
-        HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
+        rightGroup.getChildren().addAll(liveBadge, userEmailLbl, btnLogout);
 
-        topBar.getChildren().addAll(brand, userGreeting, spacer, btnLogout);
-        root.setTop(topBar);
+        bar.getChildren().addAll(leftGroup, s1, navTrack, s2, rightGroup);
 
-        // Center TabPane
-        TabPane tabPane = new TabPane();
+        HBox borderLine = new HBox();
+        borderLine.setPrefHeight(1);
+        borderLine.setStyle("-fx-background-color: #EBEBEB;");
 
-        Tab tab1 = new Tab("Incident Queue & Multi-Agent Investigation", incidentsView);
-        tab1.setClosable(false);
+        wrapper.getChildren().addAll(bar, borderLine);
+        return wrapper;
+    }
 
-        Tab tab2 = new Tab("Report New Incident", reportIncidentView);
-        tab2.setClosable(false);
+    private Button makeNavBtn(String text, String tabId) {
+        Button btn = new Button(text);
+        applyNavStyle(btn, false);
+        btn.setOnAction(e -> showTab(tabId));
+        return btn;
+    }
 
-        Tab tab3 = new Tab("Platform Analytics & MTTR", analyticsView);
-        tab3.setClosable(false);
+    private void showTab(String tabId) {
+        incidentsView.setVisible("incidents".equals(tabId));
+        reportView.setVisible("report".equals(tabId));
+        analyticsView.setVisible("analytics".equals(tabId));
 
-        tabPane.getTabs().addAll(tab1, tab2, tab3);
-        root.setCenter(tabPane);
+        if ("analytics".equals(tabId)) {
+            analyticsView.refreshDashboard();
+        } else if ("incidents".equals(tabId)) {
+            incidentsView.refreshIncidents();
+        }
 
-        return new Scene(root);
+        for (Button b : new Button[]{navIncidents, navReport, navAnalytics}) {
+            applyNavStyle(b, false);
+        }
+        Button active = switch (tabId) {
+            case "report"    -> navReport;
+            case "analytics" -> navAnalytics;
+            default          -> navIncidents;
+        };
+        applyNavStyle(active, true);
+    }
+
+    private void applyNavStyle(Button btn, boolean active) {
+        if (active) {
+            btn.setStyle(
+                "-fx-background-color: #FFFFFF;" +
+                "-fx-text-fill: #000000;" +
+                "-fx-font-size: 13px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-padding: 7 20;" +
+                "-fx-background-radius: 999;" +
+                "-fx-cursor: hand;"
+            );
+            DropShadow s = new DropShadow();
+            s.setColor(Color.rgb(0, 0, 0, 0.08));
+            s.setRadius(8);
+            s.setOffsetY(2);
+            btn.setEffect(s);
+        } else {
+            btn.setStyle(
+                "-fx-background-color: transparent;" +
+                "-fx-text-fill: #52525B;" +
+                "-fx-font-size: 13px;" +
+                "-fx-font-weight: 600;" +
+                "-fx-padding: 7 20;" +
+                "-fx-background-radius: 999;" +
+                "-fx-cursor: hand;"
+            );
+            btn.setEffect(null);
+        }
     }
 }
