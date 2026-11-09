@@ -21,6 +21,10 @@ import javafx.scene.web.WebView;
 public class SerkoHeroGlobe extends StackPane {
 
     private boolean usingWebView = false;
+    private WebEngine engine;
+    private boolean pageLoaded = false;
+    private boolean paused = false;
+    private AnimationTimer fallbackTimer;
 
     public SerkoHeroGlobe() {
         setMouseTransparent(true);
@@ -33,8 +37,14 @@ public class SerkoHeroGlobe extends StackPane {
                 webView.setMouseTransparent(true);
                 webView.setContextMenuEnabled(false);
                 webView.setFocusTraversable(false);
-                WebEngine engine = webView.getEngine();
+                engine = webView.getEngine();
                 engine.setJavaScriptEnabled(true);
+                engine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
+                    if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
+                        pageLoaded = true;
+                        applyWebPause();
+                    }
+                });
                 engine.load(htmlUrl.toExternalForm());
 
                 webView.prefWidthProperty().bind(widthProperty());
@@ -51,13 +61,31 @@ public class SerkoHeroGlobe extends StackPane {
         }
     }
 
+    public void setPaused(boolean paused) {
+        if (this.paused == paused) return;
+        this.paused = paused;
+        if (usingWebView) {
+            applyWebPause();
+        } else if (fallbackTimer != null) {
+            if (paused) fallbackTimer.stop();
+            else fallbackTimer.start();
+        }
+    }
+
+    private void applyWebPause() {
+        if (!pageLoaded || engine == null) return;
+        try {
+            engine.executeScript("if (window.setGlobePaused) window.setGlobePaused(" + paused + ");");
+        } catch (Throwable ignored) {}
+    }
+
     private void installCanvasFallback() {
         Canvas canvas = new Canvas();
         canvas.widthProperty().bind(widthProperty());
         canvas.heightProperty().bind(heightProperty());
         getChildren().add(canvas);
 
-        AnimationTimer timer = new AnimationTimer() {
+        fallbackTimer = new AnimationTimer() {
             double t = 0;
 
             @Override
@@ -110,7 +138,9 @@ public class SerkoHeroGlobe extends StackPane {
                 g.strokeArc(cx - r * 0.75, cy - r * 0.45, r * 1.5, r * 0.8, 15, 150, javafx.scene.shape.ArcType.OPEN);
             }
         };
-        timer.start();
+        if (!paused) {
+            fallbackTimer.start();
+        }
     }
 }
 

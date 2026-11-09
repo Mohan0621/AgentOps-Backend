@@ -1,10 +1,22 @@
 Write-Host "Starting IncidentIQ Backend Server on http://localhost:8080 ..." -ForegroundColor Cyan
-Set-Location -Path "D:\Mohan\AgentOps\agentops"
+Push-Location -Path "$PSScriptRoot\agentops"
+try {
+    if (-not $env:DB_URL) { $env:DB_URL = "jdbc:mysql://localhost:3306/agentops_db" }
+    if (-not $env:DB_USERNAME) { $env:DB_USERNAME = "root" }
+    if (-not $env:DB_PASSWORD) { $env:DB_PASSWORD = "12345678" }
+    if (-not $env:JWT_SECRET) { $env:JWT_SECRET = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970" }
+    if (-not $env:JWT_EXPIRATION_MS) { $env:JWT_EXPIRATION_MS = "86400000" }
 
-if (-not $env:DB_URL) { $env:DB_URL = "jdbc:mysql://localhost:3306/agentops_db" }
-if (-not $env:DB_USERNAME) { $env:DB_USERNAME = "root" }
-if (-not $env:DB_PASSWORD) { $env:DB_PASSWORD = "12345678" }
-if (-not $env:JWT_SECRET) { $env:JWT_SECRET = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970" }
-if (-not $env:JWT_EXPIRATION_MS) { $env:JWT_EXPIRATION_MS = "86400000" }
+    if (-not (Test-Path "target\agentops-0.0.1-SNAPSHOT.jar")) {
+        Write-Host "Backend JAR not found; packaging application..." -ForegroundColor Yellow
+        mvn package -DskipTests "-Dmaven.repo.local=D:\m2_repo"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Maven package failed."
+            exit $LASTEXITCODE
+        }
+    }
 
-java "-Dspring.classformat.ignore=true" -jar target\agentops-0.0.1-SNAPSHOT.jar
+    java "-Dspring.classformat.ignore=true" -jar target\agentops-0.0.1-SNAPSHOT.jar
+} finally {
+    Pop-Location
+}

@@ -35,15 +35,48 @@
 (function() {
   const canvas = document.getElementById('globe');
   const ctx = canvas.getContext('2d');
+  const auraCanvas = document.createElement('canvas');
+  const auraCtx = auraCanvas.getContext('2d');
   let width = 0, height = 0, dpr = 1;
+  let paused = false;
+  let rafId = 0;
+
+  window.setGlobePaused = function(flag) {
+    const next = Boolean(flag);
+    if (paused === next) return;
+    paused = next;
+    if (!paused && !rafId) {
+      lastPaint = performance.now();
+      rafId = requestAnimationFrame(frame);
+    }
+  };
+
+  function rebuildAura(cx, cy, radius) {
+    auraCanvas.width = Math.max(1, width);
+    auraCanvas.height = Math.max(1, height);
+    auraCtx.clearRect(0, 0, width, height);
+    const aura = auraCtx.createRadialGradient(cx, cy, radius * 0.25, cx, cy, radius * 1.32);
+    aura.addColorStop(0, 'rgba(255, 255, 255, 0.55)');
+    aura.addColorStop(0.55, 'rgba(207, 105, 224, 0.14)');
+    aura.addColorStop(0.85, 'rgba(255, 140, 81, 0.12)');
+    aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    auraCtx.fillStyle = aura;
+    auraCtx.beginPath();
+    auraCtx.arc(cx, cy, radius * 1.32, 0, Math.PI * 2);
+    auraCtx.fill();
+  }
 
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     width = window.innerWidth;
     height = window.innerHeight;
-    canvas.width = Math.max(1, width * dpr);
-    canvas.height = Math.max(1, height * dpr);
+    canvas.width = Math.max(1, Math.floor(width * dpr));
+    canvas.height = Math.max(1, Math.floor(height * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cx = width * 0.5;
+    const cy = height * 0.62;
+    const radius = Math.min(width * 0.36, height * 0.52);
+    rebuildAura(cx, cy, radius);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -51,7 +84,7 @@
   const DEG = Math.PI / 180;
   // Fibonacci sphere dots for subtle glowing lattice like serko.ai's WebGL hero globe
   const dots = [];
-  const N = 420;
+  const N = 240;
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < N; i++) {
     const y = 1 - (i / (N - 1)) * 2;
@@ -97,8 +130,17 @@
   }
 
   let t = 0;
-  function frame() {
-    t += 0.008;
+  let lastPaint = performance.now();
+  function frame(now) {
+    rafId = 0;
+    if (paused) return;
+    if (now - lastPaint < 30) {
+      rafId = requestAnimationFrame(frame);
+      return;
+    }
+    const dt = Math.min(0.08, (now - lastPaint) / 1000);
+    lastPaint = now;
+    t += dt * 0.48;
     ctx.clearRect(0, 0, width, height);
 
     const cx = width * 0.5;
@@ -109,16 +151,8 @@
     const rotY = t * 0.48;
     const rotX = -0.32;
 
-    // 1. Soft atmospheric radial aura halo around globe
-    const aura = ctx.createRadialGradient(cx, cy, radius * 0.25, cx, cy, radius * 1.32);
-    aura.addColorStop(0, 'rgba(255, 255, 255, 0.55)');
-    aura.addColorStop(0.55, 'rgba(207, 105, 224, 0.14)');
-    aura.addColorStop(0.85, 'rgba(255, 140, 81, 0.12)');
-    aura.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = aura;
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 1.32, 0, Math.PI * 2);
-    ctx.fill();
+    // 1. Cached atmospheric radial aura halo around globe
+    ctx.drawImage(auraCanvas, 0, 0, width, height);
 
     // 2. Crisp translucent outer rim ring
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
@@ -132,7 +166,7 @@
     for (let lat = -60; lat <= 60; lat += 30) {
       ctx.beginPath();
       let started = false;
-      for (let lon = -180; lon <= 180; lon += 6) {
+      for (let lon = -180; lon <= 180; lon += 10) {
         const p = rotateVec(latLonToVec(lat, lon), rotY, rotX);
         if (p.z > -0.05) {
           const sx = cx + p.x * radius;
@@ -150,7 +184,7 @@
     for (let lon = 0; lon < 180; lon += 30) {
       ctx.beginPath();
       let started = false;
-      for (let a = 0; a <= 360; a += 6) {
+      for (let a = 0; a <= 360; a += 10) {
         const rad = a * DEG;
         const vec = {
           x: Math.cos(rad) * Math.cos(lon * DEG),
@@ -190,10 +224,9 @@
       const va = latLonToVec(hubs[pair[0]].lat, hubs[pair[0]].lon);
       const vb = latLonToVec(hubs[pair[1]].lat, hubs[pair[1]].lon);
       const pts = [];
-      const steps = 36;
+      const steps = 22;
       for (let s = 0; s <= steps; s++) {
         const f = s / steps;
-        // Spherical slerp approx with lift
         let mx = va.x * (1 - f) + vb.x * f;
         let my = va.y * (1 - f) + vb.y * f;
         let mz = va.z * (1 - f) + vb.z * f;
@@ -258,9 +291,9 @@
       }
     });
 
-    requestAnimationFrame(frame);
+    rafId = requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  rafId = requestAnimationFrame(frame);
 })();
 </script>
 </body>

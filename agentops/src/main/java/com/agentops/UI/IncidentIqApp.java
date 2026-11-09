@@ -86,12 +86,14 @@ public class IncidentIqApp extends Application {
     }
 
     private void openAuth(boolean registerMode) {
+        publicWebsiteView.setSceneActive(false);
         loginView.setRegisterMode(registerMode);
         primaryStage.setScene(loginScene);
     }
 
     private void openPublicWebsite() {
         publicWebsiteView.refreshAuthButtons(ApiClient.isAuthenticated());
+        publicWebsiteView.setSceneActive(true);
         primaryStage.setScene(websiteScene);
     }
 
@@ -104,6 +106,7 @@ public class IncidentIqApp extends Application {
     }
 
     private void onLoginSuccess() {
+        publicWebsiteView.setSceneActive(false);
         String email = ApiClient.getCurrentUserEmail();
         if (userEmailLbl != null) {
             userEmailLbl.setText(email != null && !email.isBlank() ? email : "Signed in");

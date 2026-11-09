@@ -11,12 +11,14 @@ import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.CacheHint;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
@@ -56,6 +58,7 @@ public class PublicWebsiteView extends StackPane {
     private Timeline typewriterTimeline;
     private Timeline marqueeTimeline;
     private TranslateTransition marqueeTransition;
+    private SerkoHeroGlobe activeHeroGlobe;
 
     public PublicWebsiteView(Consumer<Boolean> onOpenAuth, Runnable onOpenWorkspaceIfLoggedIn) {
         this.onOpenAuth = onOpenAuth;
@@ -79,14 +82,44 @@ public class PublicWebsiteView extends StackPane {
         getChildren().addAll(scrollPane, navbar);
 
         scrollPane.vvalueProperty().addListener((obs, oldV, newV) -> {
-            boolean shouldElevate = newV.doubleValue() > 0.02;
+            double v = newV.doubleValue();
+            boolean shouldElevate = v > 0.02;
             if (shouldElevate != scrolledPastTop) {
                 scrolledPastTop = shouldElevate;
                 updateNavbarBackdrop();
             }
+            if (activeHeroGlobe != null) {
+                activeHeroGlobe.setPaused(v > 0.24);
+            }
+        });
+
+        // Snappier wheel scrolling on long editorial pages while preserving smooth trackpad input
+        scrollPane.addEventFilter(ScrollEvent.SCROLL, ev -> {
+            if (ev.getDeltaY() != 0 && pageContainer.getHeight() > scrollPane.getViewportBounds().getHeight()) {
+                double scrollable = pageContainer.getHeight() - scrollPane.getViewportBounds().getHeight();
+                double mult = Math.abs(ev.getDeltaY()) >= 20 ? 2.4 : 1.35;
+                double deltaV = (-ev.getDeltaY() * mult) / scrollable;
+                double next = Math.max(0.0, Math.min(1.0, scrollPane.getVvalue() + deltaV));
+                scrollPane.setVvalue(next);
+                ev.consume();
+            }
         });
 
         navigateTo(Page.HOME);
+    }
+
+    public void setSceneActive(boolean active) {
+        if (activeHeroGlobe != null) {
+            activeHeroGlobe.setPaused(!active || scrollPane.getVvalue() > 0.24);
+        }
+        if (marqueeTransition != null) {
+            if (active) marqueeTransition.play();
+            else marqueeTransition.pause();
+        }
+        if (heroCycleTimeline != null) {
+            if (active) heroCycleTimeline.play();
+            else heroCycleTimeline.pause();
+        }
     }
 
     // ── Public Controls ─────────────────────────────────────────
@@ -134,6 +167,10 @@ public class PublicWebsiteView extends StackPane {
         if (typewriterTimeline != null) typewriterTimeline.stop();
         if (marqueeTimeline != null) marqueeTimeline.stop();
         if (marqueeTransition != null) marqueeTransition.stop();
+        if (activeHeroGlobe != null) {
+            activeHeroGlobe.setPaused(true);
+            activeHeroGlobe = null;
+        }
     }
 
     // ── Floating Top Navigation Bar (Serko nav1_wrap) ───────────
@@ -262,6 +299,7 @@ public class PublicWebsiteView extends StackPane {
 
         // Background: JS HTML5 Canvas 3D Globe + Sky Horizon Gradient
         SerkoHeroGlobe globeBackdrop = new SerkoHeroGlobe();
+        this.activeHeroGlobe = globeBackdrop;
 
         // Foreground Editorial Content + Floating Card
         VBox content = new VBox(16);
@@ -542,6 +580,8 @@ public class PublicWebsiteView extends StackPane {
             "-fx-border-radius: 26;"
         );
         visualOuter.setEffect(UITheme.softCardShadow());
+        visualOuter.setCache(true);
+        visualOuter.setCacheHint(CacheHint.SPEED);
 
         // User chat bubble right
         HBox userMsgRow = new HBox();
@@ -820,6 +860,8 @@ public class PublicWebsiteView extends StackPane {
             "-fx-border-radius: 26;"
         );
         frame.setEffect(UITheme.softCardShadow());
+        frame.setCache(true);
+        frame.setCacheHint(CacheHint.SPEED);
 
         // Top simulated app bar inside preview
         HBox appTop = new HBox(10);
