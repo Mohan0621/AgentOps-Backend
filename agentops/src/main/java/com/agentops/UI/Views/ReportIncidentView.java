@@ -1,8 +1,12 @@
 package com.agentops.UI.Views;
 
 import java.net.http.HttpResponse;
+import java.util.Locale;
+import java.util.function.Consumer;
 
 import com.agentops.UI.ApiClient;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -11,6 +15,7 @@ import javafx.scene.Cursor;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -29,8 +34,10 @@ import javafx.scene.paint.Color;
  */
 public class ReportIncidentView extends ScrollPane {
 
+    private final ObjectMapper mapper = new ObjectMapper();
     private final Runnable onIncidentCreated;
     private final Runnable onViewQueue;
+    private Consumer<String> onNotifyToast;
 
     private TextField txtTitle;
     private TextField txtType;
@@ -42,7 +49,9 @@ public class ReportIncidentView extends ScrollPane {
     private StackPane statusIconSlot;
     private Label statusLbl;
     private Button btnSubmit;
+    private Button btnPreviewAi;
     private Button btnOpenQueueAfterSave;
+    private VBox aiPreviewCard;
 
     public ReportIncidentView(Runnable onIncidentCreated) {
         this(onIncidentCreated, null);
@@ -52,6 +61,10 @@ public class ReportIncidentView extends ScrollPane {
         this.onIncidentCreated = onIncidentCreated;
         this.onViewQueue = onViewQueue;
         buildUI();
+    }
+
+    public void setOnNotifyToast(Consumer<String> onNotifyToast) {
+        this.onNotifyToast = onNotifyToast;
     }
 
     private void buildUI() {
@@ -110,7 +123,8 @@ public class ReportIncidentView extends ScrollPane {
         txtType  = styledTextField("e.g. Database, Application bug, Authentication");
         GridPane row1 = twoColumnGrid(
             UITheme.formField("Incident title *", txtTitle),
-            UITheme.formField("Category", txtType)
+            UITheme.formField("Category", txtType),
+            62, 38
         );
 
         // Quick-select category chips (8px clean geometry)
@@ -172,6 +186,9 @@ public class ReportIncidentView extends ScrollPane {
         btnSubmit.setPadding(new Insets(9, 18, 9, 18));
         btnSubmit.setOnAction(e -> handleSubmit());
 
+        btnPreviewAi = UITheme.wsSecondaryBtn("Preview AI triage", UITheme.boltIcon(14, Color.web(UITheme.GRAD_BLUE)));
+        btnPreviewAi.setOnAction(e -> handlePreviewAi());
+
         Button btnClear = UITheme.wsSecondaryBtn("Clear form", null);
         btnClear.setOnAction(e -> clearForm());
 
@@ -182,7 +199,7 @@ public class ReportIncidentView extends ScrollPane {
             if (onViewQueue != null) onViewQueue.run();
         });
 
-        HBox actions = new HBox(10, btnSubmit, btnClear, btnOpenQueueAfterSave);
+        HBox actions = new HBox(10, btnSubmit, btnPreviewAi, btnClear, btnOpenQueueAfterSave);
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.setPadding(new Insets(4, 0, 0, 0));
 
@@ -231,7 +248,13 @@ public class ReportIncidentView extends ScrollPane {
         btnLoadSample.setOnAction(e -> fillSampleIncident());
         sampleSection.getChildren().addAll(sTitle, sBody, btnLoadSample);
 
-        card.getChildren().addAll(stepsSection, divider, sampleSection);
+        aiPreviewCard = new VBox(10);
+        aiPreviewCard.setPadding(new Insets(12));
+        aiPreviewCard.setStyle("-fx-background-color: #EFF6FF; -fx-border-color: #DBEAFE; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;");
+        aiPreviewCard.setVisible(false);
+        aiPreviewCard.setManaged(false);
+
+        card.getChildren().addAll(stepsSection, divider, sampleSection, aiPreviewCard);
         return card;
     }
 
@@ -299,6 +322,7 @@ public class ReportIncidentView extends ScrollPane {
                 HttpResponse<String> res = ApiClient.createIncident(title, desc, logs, severity, status, type);
                 if (res.statusCode() == 201 || res.statusCode() == 200) {
                     Platform.runLater(() -> {
+                        String savedTitle = title;
                         clearForm();
                         showStatus("Incident submitted. Open the queue to run Quick diagnosis or 6-agent investigation.", true);
                         if (onViewQueue != null) {
@@ -306,6 +330,7 @@ public class ReportIncidentView extends ScrollPane {
                             btnOpenQueueAfterSave.setManaged(true);
                         }
                         if (onIncidentCreated != null) onIncidentCreated.run();
+                        if (onNotifyToast != null) onNotifyToast.accept("Submitted: " + savedTitle);
                     });
                 } else {
                     Platform.runLater(() -> showStatus("Submission failed (" + res.statusCode() + "): " + res.body(), false));
@@ -329,8 +354,124 @@ public class ReportIncidentView extends ScrollPane {
         cmbSeverity.setValue("HIGH");
         cmbStatus.setValue("OPEN");
         hideStatus();
+        if (aiPreviewCard != null) {
+            aiPreviewCard.setVisible(false);
+            aiPreviewCard.setManaged(false);
+            aiPreviewCard.getChildren().clear();
+        }
         btnOpenQueueAfterSave.setVisible(false);
         btnOpenQueueAfterSave.setManaged(false);
+    }
+
+    private void handlePreviewAi() {
+        String title = txtTitle.getText().trim();
+        String desc  = txtDesc.getText().trim();
+        String logs  = txtLogs.getText().trim();
+        if (title.isEmpty() && logs.isEmpty()) {
+            showStatus("Enter a title or paste error logs to run instant AI preview.", false);
+            return;
+        }
+        hideStatus();
+        btnPreviewAi.setDisable(true);
+        btnPreviewAi.setText("Analyzing...");
+
+        aiPreviewCard.getChildren().setAll(
+            UITheme.wsSectionLabel("Instant AI preview"),
+            new Label("Running Groq / Gemini log analysis via /api/ai/diagnose..."),
+            progressBarIndeterminate()
+        );
+        aiPreviewCard.setVisible(true);
+        aiPreviewCard.setManaged(true);
+
+        new Thread(() -> {
+            try {
+                String effTitle = title.isEmpty() ? "Pre-submit stack trace triage" : title;
+                HttpResponse<String> res = ApiClient.diagnoseRawLogs(effTitle, desc, logs);
+                if (res.statusCode() == 200) {
+                    JsonNode n = mapper.readTree(res.body());
+                    Platform.runLater(() -> renderAiPreview(n));
+                } else {
+                    Platform.runLater(() -> showPreviewError("Preview failed (" + res.statusCode() + ")"));
+                }
+            } catch (Exception ex) {
+                Platform.runLater(() -> showPreviewError("Connection error: " + ex.getMessage()));
+            } finally {
+                Platform.runLater(() -> {
+                    btnPreviewAi.setDisable(false);
+                    btnPreviewAi.setText("Preview AI triage");
+                });
+            }
+        }).start();
+    }
+
+    private void renderAiPreview(JsonNode n) {
+        String errType = n.path("errorType").asText("Detected Anomaly");
+        String sev     = n.path("severity").asText("MEDIUM").toUpperCase(Locale.ROOT);
+        String comp    = n.path("affectedComponent").asText("Unknown component");
+        String root    = n.path("rootCause").asText("");
+
+        HBox topTags = new HBox(6, UITheme.positiveBadge("AI preview"), UITheme.severityBadge(sev));
+        topTags.setAlignment(Pos.CENTER_LEFT);
+
+        Label errLbl = new Label(errType);
+        errLbl.setWrapText(true);
+        errLbl.setStyle("-fx-font-size: 13px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
+
+        Label compLbl = new Label(comp);
+        compLbl.setWrapText(true);
+        compLbl.setStyle(UITheme.monoStyle(11.5, "#1D4ED8"));
+
+        Label rootLbl = new Label(root);
+        rootLbl.setWrapText(true);
+        rootLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #3F3F46; -fx-line-spacing: 2px;");
+
+        VBox fixes = new VBox(4);
+        int shown = 0;
+        for (JsonNode f : n.path("suggestedSolutions")) {
+            if (shown++ >= 2) break;
+            Label fl = new Label("• " + f.asText());
+            fl.setWrapText(true);
+            fl.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #18181B;");
+            fixes.getChildren().add(fl);
+        }
+
+        Button btnApply = UITheme.wsPrimaryBtn("Apply severity & category", null);
+        btnApply.setMaxWidth(Double.MAX_VALUE);
+        btnApply.setOnAction(e -> {
+            if (cmbSeverity.getItems().contains(sev)) {
+                cmbSeverity.setValue(sev);
+            }
+            txtType.setText(inferCategory(errType + " " + comp + " " + root));
+            if (txtTitle.getText().isBlank()) {
+                txtTitle.setText(errType + " in " + comp);
+            }
+            if (onNotifyToast != null) onNotifyToast.accept("Applied AI suggested severity & category");
+        });
+
+        aiPreviewCard.getChildren().setAll(topTags, errLbl, compLbl, rootLbl, fixes, btnApply);
+    }
+
+    private void showPreviewError(String msg) {
+        Label l = new Label(msg);
+        l.setWrapText(true);
+        l.setStyle("-fx-font-size: 12px; -fx-text-fill: #991B1B;");
+        aiPreviewCard.getChildren().setAll(UITheme.wsSectionLabel("AI preview error"), l);
+    }
+
+    private String inferCategory(String text) {
+        String low = text.toLowerCase(Locale.ROOT);
+        if (low.contains("sql") || low.contains("hikari") || low.contains("jdbc") || low.contains("pool") || low.contains("database")) return "DATABASE";
+        if (low.contains("jwt") || low.contains("auth") || low.contains("token") || low.contains("401") || low.contains("403")) return "AUTHENTICATION";
+        if (low.contains("oom") || low.contains("heap") || low.contains("outofmemory") || low.contains("leak")) return "MEMORY_LEAK";
+        if (low.contains("socket") || low.contains("network") || low.contains("connect") || low.contains("dns")) return "NETWORK";
+        return "APPLICATION_BUG";
+    }
+
+    private ProgressBar progressBarIndeterminate() {
+        ProgressBar pb = new ProgressBar();
+        pb.setMaxWidth(Double.MAX_VALUE);
+        pb.setPrefHeight(5);
+        return pb;
     }
 
     private void showStatus(String msg, boolean success) {
@@ -382,6 +523,10 @@ public class ReportIncidentView extends ScrollPane {
     }
 
     private GridPane twoColumnGrid(VBox left, VBox right) {
+        return twoColumnGrid(left, right, 50, 50);
+    }
+
+    private GridPane twoColumnGrid(VBox left, VBox right, double leftPct, double rightPct) {
         GridPane grid = new GridPane();
         grid.setHgap(14);
         GridPane.setHgrow(left, Priority.ALWAYS);
@@ -389,7 +534,7 @@ public class ReportIncidentView extends ScrollPane {
         left.setMaxWidth(Double.MAX_VALUE);
         right.setMaxWidth(Double.MAX_VALUE);
         grid.addRow(0, left, right);
-        grid.getColumnConstraints().addAll(percentCol(50), percentCol(50));
+        grid.getColumnConstraints().addAll(percentCol(leftPct), percentCol(rightPct));
         return grid;
     }
 

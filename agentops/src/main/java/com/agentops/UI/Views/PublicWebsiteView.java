@@ -1,26 +1,36 @@
 package com.agentops.UI.Views;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import javafx.animation.Animation;
 import javafx.animation.FadeTransition;
+import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.ParallelTransition;
 import javafx.animation.RotateTransition;
+import javafx.animation.ScaleTransition;
 import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.CacheHint;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Tooltip;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.effect.Effect;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -30,7 +40,6 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
-import javafx.scene.shape.Line;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -57,13 +66,18 @@ public class PublicWebsiteView extends StackPane {
     private Button navPlatform, navTeams, navAbout;
     private Button navAuthLogin, navAuthStart;
 
+    private static final Interpolator EASE_OUT = Interpolator.SPLINE(0.16, 1.0, 0.3, 1.0);
+
     private Page currentPage = Page.HOME;
     private boolean scrolledPastTop = false;
     private double faqAnchorFraction = 0.78;
     private Timeline heroCycleTimeline;
+    private Timeline heroFloatTimeline;
+    private Timeline livePulseTimeline;
     private Timeline typewriterTimeline;
     private TranslateTransition marqueeTransition;
     private SerkoHeroGlobe activeHeroGlobe;
+    private final List<Region> revealBands = new ArrayList<>();
 
     public PublicWebsiteView(Consumer<Boolean> onOpenAuth, Runnable onOpenWorkspaceIfLoggedIn) {
         this.onOpenAuth = onOpenAuth;
@@ -93,9 +107,12 @@ public class PublicWebsiteView extends StackPane {
                 scrolledPastTop = shouldElevate;
                 updateNavbarBackdrop();
             }
+            boolean heroOffscreen = v > 0.25;
             if (activeHeroGlobe != null) {
-                activeHeroGlobe.setPaused(v > 0.25);
+                activeHeroGlobe.setPaused(heroOffscreen);
             }
+            setHeroAmbientRunning(!heroOffscreen);
+            checkScrollReveals();
         });
 
         // Snappier wheel scrolling while preserving smooth trackpad feel
@@ -114,16 +131,33 @@ public class PublicWebsiteView extends StackPane {
     }
 
     public void setSceneActive(boolean active) {
+        boolean heroActive = active && scrollPane.getVvalue() <= 0.25;
         if (activeHeroGlobe != null) {
-            activeHeroGlobe.setPaused(!active || scrollPane.getVvalue() > 0.25);
+            activeHeroGlobe.setPaused(!heroActive);
         }
+        setHeroAmbientRunning(heroActive);
         if (marqueeTransition != null) {
             if (active) marqueeTransition.play();
             else marqueeTransition.pause();
         }
+        if (typewriterTimeline != null) {
+            if (active) typewriterTimeline.play();
+            else typewriterTimeline.pause();
+        }
+    }
+
+    private void setHeroAmbientRunning(boolean running) {
         if (heroCycleTimeline != null) {
-            if (active) heroCycleTimeline.play();
+            if (running) heroCycleTimeline.play();
             else heroCycleTimeline.pause();
+        }
+        if (heroFloatTimeline != null) {
+            if (running) heroFloatTimeline.play();
+            else heroFloatTimeline.pause();
+        }
+        if (livePulseTimeline != null) {
+            if (running) livePulseTimeline.play();
+            else livePulseTimeline.pause();
         }
     }
 
@@ -131,6 +165,7 @@ public class PublicWebsiteView extends StackPane {
 
     public void navigateTo(Page page) {
         stopTimers();
+        revealBands.clear();
         this.currentPage = page;
 
         pageContainer.getChildren().clear();
@@ -148,6 +183,7 @@ public class PublicWebsiteView extends StackPane {
             scrollPane.setVvalue(0);
             scrolledPastTop = false;
             updateNavbarBackdrop();
+            checkScrollReveals();
             FadeTransition ft = new FadeTransition(Duration.millis(240), pageContainer);
             ft.setFromValue(0.35);
             ft.setToValue(1.0);
@@ -171,8 +207,15 @@ public class PublicWebsiteView extends StackPane {
 
     private void stopTimers() {
         if (heroCycleTimeline != null) heroCycleTimeline.stop();
+        if (heroFloatTimeline != null) heroFloatTimeline.stop();
+        if (livePulseTimeline != null) livePulseTimeline.stop();
         if (typewriterTimeline != null) typewriterTimeline.stop();
         if (marqueeTransition != null) marqueeTransition.stop();
+        heroCycleTimeline = null;
+        heroFloatTimeline = null;
+        livePulseTimeline = null;
+        typewriterTimeline = null;
+        marqueeTransition = null;
         if (activeHeroGlobe != null) {
             activeHeroGlobe.setPaused(true);
             activeHeroGlobe = null;
@@ -205,7 +248,9 @@ public class PublicWebsiteView extends StackPane {
         HBox brandPill = new HBox(0);
         brandPill.setAlignment(Pos.CENTER);
         brandPill.setPadding(new Insets(7, 18, 7, 18));
-        brandPill.setStyle("-fx-background-color: #FFFFFF; -fx-background-radius: 10;");
+        String brandNormal = "-fx-background-color: #FFFFFF; -fx-background-radius: 10; -fx-border-color: rgba(0,0,0,0.04); -fx-border-radius: 10; -fx-border-width: 1;";
+        String brandHover  = "-fx-background-color: #FFFFFF; -fx-background-radius: 10; -fx-border-color: rgba(0,0,0,0.12); -fx-border-radius: 10; -fx-border-width: 1;";
+        brandPill.setStyle(brandNormal);
         DropShadow pillShadow = new DropShadow();
         pillShadow.setColor(Color.rgb(0, 0, 0, 0.05));
         pillShadow.setRadius(10);
@@ -214,6 +259,7 @@ public class PublicWebsiteView extends StackPane {
         brandPill.setCursor(Cursor.HAND);
         brandPill.setOnMouseClicked(e -> navigateTo(Page.HOME));
         brandPill.getChildren().add(UITheme.brandWordmark(16.5, false));
+        installCardLift(brandPill, -1.5, 1.03, pillShadow, UITheme.elevatedCardShadow(), brandNormal, brandHover);
 
         // Right: Log in + Rainbow-ringed "Get started >" pill
         navAuthLogin = new Button("Log in");
@@ -267,9 +313,9 @@ public class PublicWebsiteView extends StackPane {
             navbar.setMaxWidth(860);
             navbar.setPadding(new Insets(6, 14, 6, 14));
             navbar.setStyle(
-                "-fx-background-color: rgba(255, 255, 255, 0.94);" +
+                "-fx-background-color: #FFFFFF;" +
                 "-fx-background-radius: 14;" +
-                "-fx-border-color: rgba(0, 0, 0, 0.06);" +
+                "-fx-border-color: rgba(0, 0, 0, 0.08);" +
                 "-fx-border-radius: 14;" +
                 "-fx-border-width: 1;"
             );
@@ -296,21 +342,21 @@ public class PublicWebsiteView extends StackPane {
         pageContainer.getChildren().addAll(
             buildHomeHeroSection(),
             buildTechMarqueeStrip(),
-            buildFeature1IceSection(),
-            buildFeature2DisruptionSection(),
-            buildFeature3SmartPillsSection(),
-            buildFeature4WorkspacePreviewSection(),
-            buildClosingCtaSection("Get started", "Got an outage piling up?", "Get it sorted with ", "IncidentIQ.",
-                "Skip manual stack-trace grepping. Paste your logs and let 6 autonomous agents isolate root cause and draft the fix."),
-            buildFaqSection(defaultHomeFaqs()),
+            withScrollReveal(buildFeature1IceSection()),
+            withScrollReveal(buildFeature2DisruptionSection()),
+            withScrollReveal(buildFeature3SmartPillsSection()),
+            withScrollReveal(buildFeature4WorkspacePreviewSection()),
+            withScrollReveal(buildClosingCtaSection("Get started", "Got an outage piling up?", "Get it sorted with ", "IncidentIQ.",
+                "Skip manual stack-trace grepping. Paste your logs and let 6 autonomous agents isolate root cause and draft the fix.")),
+            withScrollReveal(buildFaqSection(defaultHomeFaqs())),
             buildLightFooter()
         );
     }
 
     private StackPane buildHomeHeroSection() {
         StackPane hero = new StackPane();
-        hero.setMinHeight(1080);
-        hero.setPrefHeight(1100);
+        hero.setMinHeight(1120);
+        hero.setPrefHeight(1140);
         hero.setAlignment(Pos.TOP_CENTER);
 
         // Background: JS HTML5 Canvas 3D Charcoal Stippled Globe + Sky Horizon Gradient
@@ -320,8 +366,8 @@ public class PublicWebsiteView extends StackPane {
         // Above-the-fold Hero Typography + CTAs, followed cleanly BELOW the globe dome by the Profile Showcase Widget
         VBox content = new VBox(14);
         content.setAlignment(Pos.TOP_CENTER);
-        content.setPadding(new Insets(142, 48, 56, 48));
-        content.setMaxWidth(960);
+        content.setPadding(new Insets(142, 28, 56, 28));
+        content.setMaxWidth(1060);
 
         Label eyebrow = UITheme.eyebrowLabel("AI incident agent");
         TextFlow titleFlow = UITheme.gradientAccentFlow(
@@ -353,82 +399,145 @@ public class PublicWebsiteView extends StackPane {
 
         // Clean breathing space over rising dotted dome before layered Production Watch widget
         Region domeSpacer = new Region();
-        domeSpacer.setMinHeight(335);
-        domeSpacer.setPrefHeight(345);
+        domeSpacer.setMinHeight(360);
+        domeSpacer.setPrefHeight(372);
 
         StackPane layeredWidget = buildHeroInteractiveCard();
         content.getChildren().addAll(eyebrow, titleFlow, sub, ctaRow, domeSpacer, layeredWidget);
 
         hero.getChildren().addAll(globeBackdrop, content);
+
+        // Subtle 3D globe cursor parallax across the hero surface without intercepting clicks
+        hero.addEventFilter(MouseEvent.MOUSE_MOVED, ev -> {
+            double w = hero.getWidth();
+            double h = hero.getHeight();
+            if (w > 0 && h > 0) {
+                double nx = ((ev.getX() / w) - 0.5) * 2.0;
+                double ny = ((ev.getY() / h) - 0.5) * 2.0;
+                globeBackdrop.setPointer(nx, ny);
+            }
+        });
+        hero.addEventFilter(MouseEvent.MOUSE_EXITED, ev -> globeBackdrop.resetPointer());
+
         return hero;
     }
 
     /**
-     * Layered hero profile + floating confirmation chips matching serko.ai hero1_profile_wrap.
+     * Layered hero profile + non-overlapping floating confirmation chips matching serko.ai hero1_profile_wrap.
      */
     private StackPane buildHeroInteractiveCard() {
         StackPane stage = new StackPane();
-        stage.setMaxWidth(680);
-        stage.setMinHeight(210);
-        stage.setAlignment(Pos.BOTTOM_CENTER);
+        stage.setMaxWidth(960);
+        stage.setMinHeight(196);
+        stage.setAlignment(Pos.CENTER);
 
-        // Floating top-left service route confirmation chip (hero1_profile_route_wrap)
-        VBox routeChip = new VBox(3);
-        routeChip.setMaxWidth(215);
-        routeChip.setPadding(new Insets(12, 16, 12, 16));
-        routeChip.setStyle(
+        // Structured 3-column staggered layout guarantees zero overlap at every viewport width >= 1040px
+        HBox stageRow = new HBox(18);
+        stageRow.setAlignment(Pos.CENTER);
+        stageRow.setMaxWidth(940);
+
+        // 1. Left floating service route confirmation chip
+        String chipBaseStyle =
             "-fx-background-color: #FFFFFF; -fx-background-radius: 16;" +
-            "-fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 16;"
-        );
-        routeChip.setEffect(UITheme.softCardShadow());
-        HBox routeHead = new HBox(6, UITheme.terminalIcon(14, Color.BLACK), medLabel("CHECKOUT-API -> PATCH", 11.5, "#000000"));
+            "-fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 16; -fx-border-width: 1;";
+        String chipHoverBlue =
+            "-fx-background-color: #FFFFFF; -fx-background-radius: 16;" +
+            "-fx-border-color: rgba(27,152,242,0.42); -fx-border-radius: 16; -fx-border-width: 1;";
+        String chipHoverGreen =
+            "-fx-background-color: #FFFFFF; -fx-background-radius: 16;" +
+            "-fx-border-color: rgba(22,163,74,0.40); -fx-border-radius: 16; -fx-border-width: 1;";
+
+        VBox routeChip = new VBox(3);
+        routeChip.setPrefWidth(208);
+        routeChip.setMinSize(204, Region.USE_PREF_SIZE);
+        routeChip.setMaxSize(214, Region.USE_PREF_SIZE);
+        routeChip.setPadding(new Insets(12, 16, 12, 16));
+        routeChip.setStyle(chipBaseStyle);
+        DropShadow routeBaseShadow = UITheme.softCardShadow();
+        routeChip.setEffect(routeBaseShadow);
+        routeChip.setCursor(Cursor.HAND);
+
+        Label routeTitleLbl = medLabel("CHECKOUT-API -> PATCH", 11.5, "#000000");
+        routeTitleLbl.setWrapText(false);
+        routeTitleLbl.setMinWidth(Region.USE_PREF_SIZE);
+        HBox routeHead = new HBox(6, UITheme.terminalIcon(14, Color.BLACK), routeTitleLbl);
         routeHead.setAlignment(Pos.CENTER_LEFT);
         Label routeMeta = medLabel("NullPointer · line 418", 11.5, "#71717A");
+        routeMeta.setWrapText(false);
+        routeMeta.setMinWidth(Region.USE_PREF_SIZE);
         routeChip.getChildren().addAll(routeHead, routeMeta);
-        StackPane.setAlignment(routeChip, Pos.TOP_LEFT);
-        StackPane.setMargin(routeChip, new Insets(10, 0, 0, 0));
 
-        // Floating top-right verified deployment chip (hero1_profile_hotel_wrap)
+        VBox leftCol = new VBox(routeChip);
+        leftCol.setAlignment(Pos.TOP_CENTER);
+        leftCol.setPadding(new Insets(0, 0, 38, 0));
+
+        // 2. Right floating verified deployment chip
         HBox confirmChip = new HBox(10);
-        confirmChip.setMaxWidth(235);
+        confirmChip.setPrefWidth(244);
+        confirmChip.setMinSize(238, Region.USE_PREF_SIZE);
+        confirmChip.setMaxSize(248, Region.USE_PREF_SIZE);
         confirmChip.setAlignment(Pos.CENTER_LEFT);
         confirmChip.setPadding(new Insets(12, 16, 12, 16));
-        confirmChip.setStyle(
-            "-fx-background-color: #FFFFFF; -fx-background-radius: 16;" +
-            "-fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 16;"
-        );
-        confirmChip.setEffect(UITheme.softCardShadow());
-        VBox confTexts = new VBox(2, medLabel("HikariPool Guard", 12, "#000000"), medLabel("Auto-verified PR #88", 11, "#71717A"));
+        confirmChip.setStyle(chipBaseStyle);
+        DropShadow confBaseShadow = UITheme.softCardShadow();
+        confirmChip.setEffect(confBaseShadow);
+        confirmChip.setCursor(Cursor.HAND);
+
+        Label confTitle = medLabel("Checkout Guard", 12, "#000000");
+        confTitle.setWrapText(false);
+        confTitle.setMinWidth(Region.USE_PREF_SIZE);
+        Label confSub = medLabel("Auto-verified PR #88", 11, "#71717A");
+        confSub.setWrapText(false);
+        confSub.setMinWidth(Region.USE_PREF_SIZE);
+        VBox confTexts = new VBox(2, confTitle, confSub);
         Label confBadge = new Label("Confirmed");
+        confBadge.setMinWidth(Region.USE_PREF_SIZE);
         confBadge.setStyle(
             "-fx-background-color: " + UITheme.SERKO_POS_BG + "; -fx-text-fill: " + UITheme.SERKO_POS_INK + ";" +
             "-fx-font-size: 11px; -fx-font-weight: 500; -fx-padding: 3 8; -fx-background-radius: 6;"
         );
-        confirmChip.getChildren().addAll(confTexts, confBadge);
-        StackPane.setAlignment(confirmChip, Pos.TOP_RIGHT);
-        StackPane.setMargin(confirmChip, new Insets(0, 6, 0, 0));
+        Region confSpacer = spacerRegion();
+        confirmChip.getChildren().addAll(confTexts, confSpacer, confBadge);
 
-        // Foreground Serko layered profile widget (#F6F6F6 container with white prompt bar top + profile strip bottom)
+        VBox rightCol = new VBox(confirmChip);
+        rightCol.setAlignment(Pos.TOP_CENTER);
+        rightCol.setPadding(new Insets(0, 0, 48, 0));
+
+        // 3. Center foreground Serko layered profile widget (#F6F6F6 container)
         VBox shell = new VBox(12);
-        shell.setMaxWidth(450);
+        shell.setPrefWidth(388);
+        shell.setMinWidth(356);
+        shell.setMaxWidth(408);
+        shell.setMaxHeight(Region.USE_PREF_SIZE);
         shell.setPadding(new Insets(14));
-        shell.setStyle(
+        String shellBaseStyle =
             "-fx-background-color: #F6F6F6;" +
             "-fx-background-radius: 20;" +
-            "-fx-border-color: rgba(0, 0, 0, 0.05);" +
-            "-fx-border-radius: 20;"
-        );
-        DropShadow shadow = new DropShadow();
-        shadow.setColor(Color.rgb(0, 0, 0, 0.10));
-        shadow.setRadius(32);
-        shadow.setOffsetY(12);
-        shell.setEffect(shadow);
+            "-fx-border-color: rgba(0, 0, 0, 0.06);" +
+            "-fx-border-radius: 20;" +
+            "-fx-border-width: 1;";
+        String shellHoverStyle =
+            "-fx-background-color: #F6F6F6;" +
+            "-fx-background-radius: 20;" +
+            "-fx-border-color: rgba(27, 152, 242, 0.34);" +
+            "-fx-border-radius: 20;" +
+            "-fx-border-width: 1;";
+        shell.setStyle(shellBaseStyle);
+        DropShadow shellShadow = new DropShadow();
+        shellShadow.setColor(Color.rgb(0, 0, 0, 0.10));
+        shellShadow.setRadius(32);
+        shellShadow.setOffsetY(12);
+        shell.setEffect(shellShadow);
 
         // Top white prompt choice bar (hero1_profile_choice_wrap)
         HBox queryBar = new HBox(10);
         queryBar.setAlignment(Pos.CENTER_LEFT);
         queryBar.setPadding(new Insets(11, 14, 11, 14));
-        queryBar.setStyle("-fx-background-color: #FFFFFF; -fx-background-radius: 14;");
+        String qBarNormal = "-fx-background-color: #FFFFFF; -fx-background-radius: 14; -fx-border-color: transparent; -fx-border-radius: 14; -fx-border-width: 1;";
+        String qBarHover  = "-fx-background-color: #FFFFFF; -fx-background-radius: 14; -fx-border-color: rgba(0,0,0,0.10); -fx-border-radius: 14; -fx-border-width: 1;";
+        queryBar.setStyle(qBarNormal);
+        queryBar.setCursor(Cursor.HAND);
+        Tooltip.install(queryBar, new Tooltip("Click to cycle live agent triage traces"));
 
         StackPane checkBadge = new StackPane(UITheme.checkMarkIcon(Color.WHITE, 0.75));
         checkBadge.setPrefSize(22, 22);
@@ -442,9 +551,14 @@ public class PublicWebsiteView extends StackPane {
         lblActiveTrace.setStyle("-fx-font-size: 13px; -fx-font-weight: 500; -fx-text-fill: #000000;");
 
         Region qSp = new Region(); HBox.setHgrow(qSp, Priority.ALWAYS);
-        StackPane arrowCircle = new StackPane(UITheme.svgStrokeIcon("M12 19V5 M6 11l6-6 6 6", 13, Color.web("#52525B"), 1.8));
+        StackPane arrowIconNormal = UITheme.svgStrokeIcon("M12 19V5 M6 11l6-6 6 6", 13, Color.web("#52525B"), 1.8);
+        StackPane arrowIconHover  = UITheme.svgStrokeIcon("M12 19V5 M6 11l6-6 6 6", 13, Color.WHITE, 1.8);
+        StackPane arrowCircle = new StackPane(arrowIconNormal);
         arrowCircle.setPrefSize(26, 26);
-        arrowCircle.setStyle("-fx-background-color: #F6F6F6; -fx-background-radius: 999; -fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 999;");
+        arrowCircle.setMinSize(26, 26);
+        String arrNormal = "-fx-background-color: #F6F6F6; -fx-background-radius: 999; -fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 999;";
+        String arrHover  = "-fx-background-color: #000000; -fx-background-radius: 999; -fx-border-color: #000000; -fx-border-radius: 999;";
+        arrowCircle.setStyle(arrNormal);
 
         queryBar.getChildren().addAll(checkBadge, lblActiveTrace, qSp, arrowCircle);
 
@@ -452,37 +566,151 @@ public class PublicWebsiteView extends StackPane {
         HBox profileRow = new HBox(12);
         profileRow.setAlignment(Pos.CENTER_LEFT);
         profileRow.setPadding(new Insets(2, 4, 2, 4));
+        profileRow.setCursor(Cursor.HAND);
+        profileRow.setOnMouseClicked(e -> onOpenAuth.accept(false));
 
         StackPane avatarBadge = new StackPane(UITheme.brandLogoMark(18, false));
         avatarBadge.setPrefSize(34, 34);
         avatarBadge.setStyle("-fx-background-color: #FFFFFF; -fx-background-radius: 8;");
+
+        Circle pulseRing = new Circle(4, Color.TRANSPARENT);
+        pulseRing.setStroke(Color.web(UITheme.POS_DOT, 0.70));
+        pulseRing.setStrokeWidth(1.6);
+        StackPane.setAlignment(pulseRing, Pos.TOP_RIGHT);
+        StackPane.setMargin(pulseRing, new Insets(-2, -2, 0, 0));
+
         Circle greenDot = new Circle(4, Color.web(UITheme.POS_DOT));
         StackPane.setAlignment(greenDot, Pos.TOP_RIGHT);
         StackPane.setMargin(greenDot, new Insets(-2, -2, 0, 0));
-        avatarBadge.getChildren().add(greenDot);
+        avatarBadge.getChildren().addAll(pulseRing, greenDot);
 
         Label profName = medLabel("Production Watch", 15, "#000000");
+        profName.setWrapText(false);
+        profName.setMinWidth(Region.USE_PREF_SIZE);
+        Label livePill = new Label("6 agents live");
+        livePill.setMinWidth(Region.USE_PREF_SIZE);
+        livePill.setStyle(
+            "-fx-background-color: #FFFFFF; -fx-text-fill: #52525B;" +
+            "-fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 999; -fx-background-radius: 999;" +
+            "-fx-font-size: 11px; -fx-font-weight: 500; -fx-padding: 2 8;"
+        );
         Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
         StackPane bell = UITheme.bellIcon(16, Color.web("#52525B"));
 
-        profileRow.getChildren().addAll(avatarBadge, profName, sp, bell);
+        profileRow.getChildren().addAll(avatarBadge, profName, livePill, sp, bell);
         shell.getChildren().addAll(queryBar, profileRow);
 
-        StackPane.setAlignment(shell, Pos.BOTTOM_CENTER);
-        stage.getChildren().addAll(routeChip, confirmChip, shell);
+        VBox centerCol = new VBox(shell);
+        centerCol.setAlignment(Pos.BOTTOM_CENTER);
+        centerCol.setPadding(new Insets(28, 0, 0, 0));
 
-        String[] states = {
-            "PaymentGateway NPE triaged in 1.4s",
-            "HikariPool timeout resolved in 1.8s",
-            "JWT clock-skew race isolated in 0.9s"
+        stageRow.getChildren().addAll(leftCol, centerCol, rightCol);
+        stage.getChildren().add(stageRow);
+
+        // Live pulsing beacon around green status dot
+        livePulseTimeline = new Timeline(
+            new KeyFrame(Duration.ZERO,
+                new KeyValue(pulseRing.scaleXProperty(), 1.0),
+                new KeyValue(pulseRing.scaleYProperty(), 1.0),
+                new KeyValue(pulseRing.opacityProperty(), 0.75)
+            ),
+            new KeyFrame(Duration.seconds(1.6),
+                new KeyValue(pulseRing.scaleXProperty(), 2.3, EASE_OUT),
+                new KeyValue(pulseRing.scaleYProperty(), 2.3, EASE_OUT),
+                new KeyValue(pulseRing.opacityProperty(), 0.0, EASE_OUT)
+            ),
+            new KeyFrame(Duration.seconds(2.2),
+                new KeyValue(pulseRing.scaleXProperty(), 1.0),
+                new KeyValue(pulseRing.scaleYProperty(), 1.0),
+                new KeyValue(pulseRing.opacityProperty(), 0.0)
+            )
+        );
+        livePulseTimeline.setCycleCount(Timeline.INDEFINITE);
+        livePulseTimeline.play();
+
+        // Gentle buoyant floating motion on outer flanking wrappers (never collides with card hover translateY)
+        final boolean[] routeHovered = {false};
+        final boolean[] confHovered  = {false};
+        final double[] floatPhase = {0};
+        heroFloatTimeline = new Timeline(new KeyFrame(Duration.millis(32), ev -> {
+            floatPhase[0] += 0.045;
+            if (!routeHovered[0]) {
+                leftCol.setTranslateY(Math.sin(floatPhase[0]) * 3.5);
+            }
+            if (!confHovered[0]) {
+                rightCol.setTranslateY(Math.sin(floatPhase[0] + 1.9) * 4.0);
+            }
+        }));
+        heroFloatTimeline.setCycleCount(Timeline.INDEFINITE);
+        heroFloatTimeline.play();
+
+        // Tactile hover lift + elevated shadows across all 3 hero cards
+        installCardLift(routeChip, -5.0, 1.022, routeBaseShadow, UITheme.elevatedCardShadow(), chipBaseStyle, chipHoverBlue,
+            inside -> routeHovered[0] = inside);
+        installCardLift(confirmChip, -5.0, 1.022, confBaseShadow, UITheme.elevatedCardShadow(), chipBaseStyle, chipHoverGreen,
+            inside -> confHovered[0] = inside);
+        installCardLift(shell, -4.0, 1.012, shellShadow, UITheme.elevatedCardShadow(), shellBaseStyle, shellHoverStyle, null);
+
+        // Interactive hover on queryBar + bell wiggle
+        queryBar.setOnMouseEntered(e -> {
+            queryBar.setStyle(qBarHover);
+            arrowCircle.setStyle(arrHover);
+            arrowCircle.getChildren().setAll(arrowIconHover);
+            animateScale(arrowCircle, 1.08, 130);
+        });
+        queryBar.setOnMouseExited(e -> {
+            queryBar.setStyle(qBarNormal);
+            arrowCircle.setStyle(arrNormal);
+            arrowCircle.getChildren().setAll(arrowIconNormal);
+            animateScale(arrowCircle, 1.0, 130);
+        });
+        profileRow.setOnMouseEntered(e -> {
+            RotateTransition rt = new RotateTransition(Duration.millis(110), bell);
+            rt.setFromAngle(-14);
+            rt.setToAngle(14);
+            rt.setAutoReverse(true);
+            rt.setCycleCount(4);
+            rt.setOnFinished(done -> bell.setRotate(0));
+            rt.play();
+        });
+
+        // Synchronized 3-card live telemetry cycle
+        String[][] states = {
+            {"PaymentGateway NPE triaged in 1.4s",    "CHECKOUT-API -> PATCH", "NullPointer · line 418",  "Checkout Guard",   "Auto-verified PR #88", "Confirmed"},
+            {"HikariPool timeout resolved in 1.8s",   "LEDGER-DAO -> CONFIG",  "PoolExhausted · 30s wait", "HikariPool Guard", "Pool limit tuned #91", "Verified"},
+            {"JWT clock-skew race isolated in 0.9s",  "AUTH-FILTER -> GUARD",  "ExpiredJwt · 45ms drift", "JwtSkew Leeway",   "Leeway patch #94",     "Confirmed"}
         };
         final int[] idx = {0};
-        heroCycleTimeline = new Timeline(new KeyFrame(Duration.seconds(3.6), ev -> {
+        Runnable advanceScenario = () -> {
             idx[0] = (idx[0] + 1) % states.length;
-            lblActiveTrace.setText(states[idx[0]]);
-        }));
+            String[] next = states[idx[0]];
+            crossfadeLabelSwap(lblActiveTrace, next[0]);
+            crossfadeLabelSwap(routeTitleLbl, next[1]);
+            crossfadeLabelSwap(routeMeta, next[2]);
+            crossfadeLabelSwap(confTitle, next[3]);
+            crossfadeLabelSwap(confSub, next[4]);
+            if (!next[5].equals(confBadge.getText())) {
+                crossfadeLabelSwap(confBadge, next[5]);
+            }
+        };
+
+        heroCycleTimeline = new Timeline(new KeyFrame(Duration.seconds(3.8), ev -> advanceScenario.run()));
         heroCycleTimeline.setCycleCount(Timeline.INDEFINITE);
         heroCycleTimeline.play();
+
+        // Clicking query bar or route/confirm chips cycles live telemetry immediately
+        queryBar.setOnMouseClicked(e -> {
+            advanceScenario.run();
+            heroCycleTimeline.playFromStart();
+        });
+        routeChip.setOnMouseClicked(e -> {
+            advanceScenario.run();
+            heroCycleTimeline.playFromStart();
+        });
+        confirmChip.setOnMouseClicked(e -> {
+            advanceScenario.run();
+            heroCycleTimeline.playFromStart();
+        });
 
         return stage;
     }
@@ -505,17 +733,29 @@ public class PublicWebsiteView extends StackPane {
             "Spring Security", "Hibernate JPA", "MySQL", "JavaFX 21"
         };
 
-        HBox track = new HBox(56);
+        HBox track = new HBox(32);
         track.setAlignment(Pos.CENTER_LEFT);
-        track.setPadding(new Insets(0, 28, 0, 28));
+        track.setPadding(new Insets(0));
         track.setMinHeight(78);
         track.setPrefHeight(78);
+
+        String itemNormal = "-fx-font-size: 14px; -fx-font-weight: 500; -fx-text-fill: #A1A1AA; -fx-padding: 5 12; -fx-background-color: transparent; -fx-background-radius: 999;";
+        String itemHover  = "-fx-font-size: 14px; -fx-font-weight: 500; -fx-text-fill: #09090B; -fx-padding: 5 12; -fx-background-color: #F4F4F5; -fx-background-radius: 999;";
 
         for (int pass = 0; pass < 3; pass++) {
             for (String item : items) {
                 Label lbl = new Label(item);
                 lbl.setMinWidth(Region.USE_PREF_SIZE);
-                lbl.setStyle("-fx-font-size: 14px; -fx-font-weight: 500; -fx-text-fill: #A1A1AA;");
+                lbl.setStyle(itemNormal);
+                lbl.setCursor(Cursor.HAND);
+                lbl.setOnMouseEntered(e -> {
+                    lbl.setStyle(itemHover);
+                    animateScale(lbl, 1.05, 140);
+                });
+                lbl.setOnMouseExited(e -> {
+                    lbl.setStyle(itemNormal);
+                    animateScale(lbl, 1.0, 140);
+                });
                 track.getChildren().add(lbl);
             }
         }
@@ -543,8 +783,27 @@ public class PublicWebsiteView extends StackPane {
         marqueeTransition.setFromX(0);
         marqueeTransition.setToX(-1140);
         marqueeTransition.setCycleCount(Timeline.INDEFINITE);
-        marqueeTransition.setInterpolator(javafx.animation.Interpolator.LINEAR);
+        marqueeTransition.setInterpolator(Interpolator.LINEAR);
         marqueeTransition.play();
+
+        track.widthProperty().addListener((obs, oldW, newW) -> {
+            double w = newW.doubleValue();
+            if (w > 200 && marqueeTransition != null) {
+                double onePass = (w + 32.0) / 3.0;
+                if (Math.abs(marqueeTransition.getToX() + onePass) > 4.0) {
+                    marqueeTransition.stop();
+                    marqueeTransition.setToX(-onePass);
+                    marqueeTransition.playFromStart();
+                }
+            }
+        });
+
+        wrap.setOnMouseEntered(e -> {
+            if (marqueeTransition != null) marqueeTransition.pause();
+        });
+        wrap.setOnMouseExited(e -> {
+            if (marqueeTransition != null) marqueeTransition.play();
+        });
 
         wrap.getChildren().addAll(trackHost, leftFade, rightFade);
         return wrap;
@@ -575,12 +834,14 @@ public class PublicWebsiteView extends StackPane {
         body.setWrapText(true);
         body.setStyle("-fx-text-fill: rgba(0,0,0,0.68); -fx-font-size: 15.5px; -fx-line-spacing: 4px;");
 
-        VBox perks = new VBox(16);
-        perks.setPadding(new Insets(12, 0, 0, 0));
+        VBox perks = new VBox(12);
+        perks.setPadding(new Insets(10, 0, 0, 0));
+        HBox perkQuick = featureHighlightItem(UITheme.terminalIcon(18, Color.BLACK), "Quick LLM triage", "Isolate failing component, error type, and fix steps in under 2 seconds.");
+        HBox perkDeep  = featureHighlightItem(UITheme.shieldIcon(18, Color.BLACK), "6-Agent deep dive", "Full root cause report saved directly to your PostgreSQL / MySQL audit trail.");
         perks.getChildren().addAll(
-            featureHighlightItem(UITheme.terminalIcon(18, Color.BLACK), "Quick LLM triage", "Isolate failing component, error type, and fix steps in under 2 seconds."),
-            UITheme.dottedDivider(340),
-            featureHighlightItem(UITheme.shieldIcon(18, Color.BLACK), "6-Agent deep dive", "Full root cause report saved directly to your PostgreSQL / MySQL audit trail.")
+            perkQuick,
+            UITheme.responsiveDottedDivider(340),
+            perkDeep
         );
 
         left.getChildren().addAll(eyebrow, h2, body, perks);
@@ -595,8 +856,12 @@ public class PublicWebsiteView extends StackPane {
 
         VBox aaCard = new VBox(16);
         aaCard.setPadding(new Insets(22));
-        aaCard.setStyle("-fx-background-color: #FFFFFF; -fx-background-radius: 20;");
-        aaCard.setEffect(UITheme.softCardShadow());
+        String aaNormal = "-fx-background-color: #FFFFFF; -fx-background-radius: 20; -fx-border-color: transparent; -fx-border-radius: 20; -fx-border-width: 1;";
+        String aaHover  = "-fx-background-color: #FFFFFF; -fx-background-radius: 20; -fx-border-color: rgba(244,137,173,0.45); -fx-border-radius: 20; -fx-border-width: 1;";
+        aaCard.setStyle(aaNormal);
+        DropShadow aaShadow = UITheme.softCardShadow();
+        aaCard.setEffect(aaShadow);
+        installCardLift(aaCard, -4.0, 1.012, aaShadow, UITheme.elevatedCardShadow(), aaNormal, aaHover, null);
 
         // Top minimal header matching live-02
         HBox topIcons = new HBox(10);
@@ -634,18 +899,50 @@ public class PublicWebsiteView extends StackPane {
         HBox composerPill = new HBox(8);
         composerPill.setAlignment(Pos.CENTER_LEFT);
         composerPill.setPadding(new Insets(6, 8, 6, 14));
-        composerPill.setStyle("-fx-background-color: #FFFFFF; -fx-background-radius: 999; -fx-border-color: #E4E4E7; -fx-border-radius: 999;");
+        String compNormal = "-fx-background-color: #FFFFFF; -fx-background-radius: 999; -fx-border-color: #E4E4E7; -fx-border-radius: 999; -fx-border-width: 1;";
+        String compHover  = "-fx-background-color: #FAFAFA; -fx-background-radius: 999; -fx-border-color: #18181B; -fx-border-radius: 999; -fx-border-width: 1;";
+        composerPill.setStyle(compNormal);
         HBox.setHgrow(composerPill, Priority.ALWAYS);
 
         Label composerPrompt = new Label("Analyze logs");
         composerPrompt.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #18181B;");
         Region cpSp = spacerRegion();
-        StackPane upBtn = new StackPane(UITheme.svgStrokeIcon("M12 19V5 M6 11l6-6 6 6", 12, Color.web("#71717A"), 1.8));
+        StackPane upIconIdle  = UITheme.svgStrokeIcon("M12 19V5 M6 11l6-6 6 6", 12, Color.web("#71717A"), 1.8);
+        StackPane upIconHover = UITheme.svgStrokeIcon("M12 19V5 M6 11l6-6 6 6", 12, Color.WHITE, 1.8);
+        StackPane upBtn = new StackPane(upIconIdle);
         upBtn.setPrefSize(24, 24);
-        upBtn.setStyle("-fx-background-color: #F4F4F5; -fx-background-radius: 999;");
+        String upNormal = "-fx-background-color: #F4F4F5; -fx-background-radius: 999;";
+        String upHover  = "-fx-background-color: #000000; -fx-background-radius: 999;";
+        upBtn.setStyle(upNormal);
         composerPill.getChildren().addAll(composerPrompt, cpSp, upBtn);
         composerPill.setCursor(Cursor.HAND);
+        composerPill.setOnMouseEntered(e -> {
+            composerPill.setStyle(compHover);
+            upBtn.setStyle(upHover);
+            upBtn.getChildren().setAll(upIconHover);
+            animateScale(upBtn, 1.08, 130);
+        });
+        composerPill.setOnMouseExited(e -> {
+            composerPill.setStyle(compNormal);
+            upBtn.setStyle(upNormal);
+            upBtn.getChildren().setAll(upIconIdle);
+            animateScale(upBtn, 1.0, 130);
+        });
         composerPill.setOnMouseClicked(e -> onOpenAuth.accept(false));
+
+        // Interactive left perks preview the corresponding investigation mode inside aaCard
+        Runnable selectQuickMode = () -> {
+            crossfadeLabelSwap(tagLine, "Incident #402 · Quick LLM triage (1.4s)");
+            crossfadeLabelSwap(diagTxt, "NullPointerException in PaymentGateway.authorize() — missing null check at line 418.");
+            runBtn.setText("Run Quick diagnosis");
+        };
+        Runnable selectDeepMode = () -> {
+            crossfadeLabelSwap(tagLine, "Incident #402 · 6-Agent deep dive");
+            crossfadeLabelSwap(diagTxt, "Deadlock in CheckoutService.processOrder(). Connection pool exhausted at line 142.");
+            runBtn.setText("Run 6-Agent investigation");
+        };
+        perkQuick.setOnMouseClicked(e -> selectQuickMode.run());
+        perkDeep.setOnMouseClicked(e -> selectDeepMode.run());
 
         composerRow.getChildren().addAll(avatar, composerPill);
 
@@ -660,14 +957,24 @@ public class PublicWebsiteView extends StackPane {
     private HBox featureHighlightItem(Node icon, String title, String desc) {
         HBox row = new HBox(14);
         row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8, 10, 8, 10));
+        String rowNormal = "-fx-background-color: transparent; -fx-background-radius: 14;";
+        String rowHover  = "-fx-background-color: rgba(255,255,255,0.58); -fx-background-radius: 14;";
+        row.setStyle(rowNormal);
+        row.setCursor(Cursor.HAND);
+
         StackPane badge = new StackPane(icon);
         badge.setPrefSize(40, 40);
         badge.setMinSize(40, 40);
-        badge.setStyle(
+        String badgeNormal =
             "-fx-background-color: rgba(255,255,255,0.65);" +
             "-fx-border-color: #CFE6FC; -fx-border-width: 1.5;" +
-            "-fx-border-radius: 10; -fx-background-radius: 10;"
-        );
+            "-fx-border-radius: 10; -fx-background-radius: 10;";
+        String badgeHover =
+            "-fx-background-color: #FFFFFF;" +
+            "-fx-border-color: #1B98F2; -fx-border-width: 1.5;" +
+            "-fx-border-radius: 10; -fx-background-radius: 10;";
+        badge.setStyle(badgeNormal);
 
         VBox texts = new VBox(2);
         Label t = medLabel(title, 15, "#000000");
@@ -675,6 +982,19 @@ public class PublicWebsiteView extends StackPane {
         d.setWrapText(true);
         d.setStyle("-fx-font-size: 13.5px; -fx-text-fill: rgba(0,0,0,0.65);");
         texts.getChildren().addAll(t, d);
+
+        row.setOnMouseEntered(e -> {
+            row.setStyle(rowHover);
+            badge.setStyle(badgeHover);
+            animateScale(badge, 1.06, 150);
+            animateTranslateX(row, 4.0, 150);
+        });
+        row.setOnMouseExited(e -> {
+            row.setStyle(rowNormal);
+            badge.setStyle(badgeNormal);
+            animateScale(badge, 1.0, 140);
+            animateTranslateX(row, 0.0, 140);
+        });
 
         row.getChildren().addAll(badge, texts);
         return row;
@@ -685,7 +1005,7 @@ public class PublicWebsiteView extends StackPane {
     private VBox buildFeature2DisruptionSection() {
         VBox band = new VBox(34);
         band.setAlignment(Pos.CENTER);
-        band.setPadding(new Insets(96, 56, 96, 56));
+        band.setPadding(new Insets(96, 36, 96, 36));
         band.setStyle("-fx-background-color: #FFFFFF;");
 
         VBox header = new VBox(12);
@@ -710,7 +1030,7 @@ public class PublicWebsiteView extends StackPane {
         VBox panel = new VBox(32);
         panel.setMaxWidth(1000);
         panel.setAlignment(Pos.CENTER);
-        panel.setPadding(new Insets(44, 28, 44, 28));
+        panel.setPadding(new Insets(44, 22, 44, 22));
         panel.setStyle(
             "-fx-background-color: linear-gradient(to bottom, #DFECFE 0%, #96CBFA 42%, #E388F2 76%, #FF8C51 100%);" +
             "-fx-background-radius: 28;"
@@ -720,16 +1040,115 @@ public class PublicWebsiteView extends StackPane {
         panelCaption.setTextAlignment(TextAlignment.CENTER);
         panelCaption.setStyle("-fx-font-size: 20px; -fx-font-weight: 500; -fx-text-fill: #000000;");
 
-        // 5 side-by-side vertical cards matching live-03
-        HBox cardsRow = new HBox(12);
+        // 5 side-by-side vertical cards matching live-03 with interactive selection & hover lift
+        HBox cardsRow = new HBox(10);
         cardsRow.setAlignment(Pos.CENTER);
-        cardsRow.getChildren().addAll(
-            disruptionCard("Incident #402", "Checkout API", "30s timeout", true),
-            disruptionCard("Fix option", "Pool Guard", "2m rollout", false),
-            disruptionCard("Fix option", "Retry Backoff", "1m config", false),
-            disruptionCard("Fix option", "Circuit Breaker", "3m patch", false),
-            disruptionCard("Fix option", "Read Replica", "Auto-route", false)
-        );
+
+        final List<VBox> fixCards = new java.util.ArrayList<>();
+        final List<Button> fixButtons = new java.util.ArrayList<>();
+        final int[] selectedIdx = {-1};
+
+        String[][] fixData = {
+            {"Fix option", "Pool Guard",      "2m rollout"},
+            {"Fix option", "Retry Backoff",   "1m config"},
+            {"Fix option", "Circuit Breaker", "3m patch"},
+            {"Fix option", "Read Replica",    "Auto-route"}
+        };
+
+        String cardBase = "-fx-background-color: #FFFFFF; -fx-background-radius: 18; -fx-border-color: transparent; -fx-border-radius: 18; -fx-border-width: 1.5;";
+        String cardHover = "-fx-background-color: #FFFFFF; -fx-background-radius: 18; -fx-border-color: rgba(27,152,242,0.45); -fx-border-radius: 18; -fx-border-width: 1.5;";
+        String cardSelected = "-fx-background-color: #FFFFFF; -fx-background-radius: 18; -fx-border-color: #16A34A; -fx-border-radius: 18; -fx-border-width: 1.5;";
+
+        String btnBlackNormal = "-fx-background-color: #000000; -fx-text-fill: #FFFFFF; -fx-font-size: 12px; -fx-font-weight: 500; -fx-padding: 8 10; -fx-background-radius: 999; -fx-cursor: hand;";
+        String btnBlackHover  = "-fx-background-color: #27272A; -fx-text-fill: #FFFFFF; -fx-font-size: 12px; -fx-font-weight: 500; -fx-padding: 8 10; -fx-background-radius: 999; -fx-cursor: hand;";
+        String btnSelStyle    = "-fx-background-color: " + UITheme.SERKO_POS_BG + "; -fx-text-fill: " + UITheme.SERKO_POS_INK + "; -fx-font-size: 12px; -fx-font-weight: 600; -fx-padding: 8 10; -fx-background-radius: 999; -fx-cursor: hand;";
+
+        for (int i = 0; i < fixData.length; i++) {
+            final int idx = i;
+            VBox fc = disruptionCard(fixData[i][0], fixData[i][1], fixData[i][2], false);
+            Button fb = (Button) fc.getChildren().get(fc.getChildren().size() - 1);
+            DropShadow baseSh = UITheme.softCardShadow();
+            fc.setStyle(cardBase);
+            fc.setEffect(baseSh);
+            fixCards.add(fc);
+            fixButtons.add(fb);
+
+            fc.setOnMouseEntered(e -> {
+                fc.setEffect(UITheme.elevatedCardShadow());
+                if (selectedIdx[0] != idx) fc.setStyle(cardHover);
+                animateLiftAndScale(fc, -6.0, 1.02, 160);
+            });
+            fc.setOnMouseExited(e -> {
+                fc.setEffect(baseSh);
+                if (selectedIdx[0] != idx) {
+                    fc.setStyle(cardBase);
+                    animateLiftAndScale(fc, 0.0, 1.0, 150);
+                } else {
+                    fc.setStyle(cardSelected);
+                    animateLiftAndScale(fc, -3.0, 1.01, 150);
+                }
+            });
+
+            fb.setOnMouseEntered(e -> {
+                if (selectedIdx[0] != idx) fb.setStyle(btnBlackHover);
+                animateScale(fb, 1.03, 130);
+            });
+            fb.setOnMouseExited(e -> {
+                if (selectedIdx[0] != idx) fb.setStyle(btnBlackNormal);
+                animateScale(fb, 1.0, 130);
+            });
+            fb.setOnAction(e -> {
+                selectedIdx[0] = (selectedIdx[0] == idx) ? -1 : idx;
+                for (int k = 0; k < fixCards.size(); k++) {
+                    boolean active = (k == selectedIdx[0]);
+                    fixCards.get(k).setStyle(active ? cardSelected : cardBase);
+                    fixButtons.get(k).setText(active ? "Selected" : "Select");
+                    fixButtons.get(k).setStyle(active ? btnSelStyle : btnBlackNormal);
+                    animateLiftAndScale(fixCards.get(k), active ? -3.0 : 0.0, active ? 1.01 : 1.0, 160);
+                }
+            });
+        }
+
+        VBox disruptedCard = disruptionCard("Incident #402", "Checkout API", "30s timeout", true);
+        String disBase  = "linear-gradient(to bottom, #EBF3FE, #F3EAFF)";
+        String disStyleNormal = "-fx-background-color: " + disBase + "; -fx-background-radius: 18; -fx-border-color: transparent; -fx-border-radius: 18; -fx-border-width: 1.5;";
+        String disStyleHover  = "-fx-background-color: " + disBase + "; -fx-background-radius: 18; -fx-border-color: rgba(245,158,11,0.45); -fx-border-radius: 18; -fx-border-width: 1.5;";
+        DropShadow disShadow = UITheme.softCardShadow();
+        disruptedCard.setStyle(disStyleNormal);
+        disruptedCard.setEffect(disShadow);
+        installCardLift(disruptedCard, -6.0, 1.02, disShadow, UITheme.elevatedCardShadow(), disStyleNormal, disStyleHover, null);
+
+        Button seeAltBtn = (Button) disruptedCard.getChildren().get(disruptedCard.getChildren().size() - 1);
+        String altBtnNormal = "-fx-background-color: rgba(255,255,255,0.72); -fx-text-fill: #000000; -fx-font-size: 12px; -fx-font-weight: 500; -fx-padding: 8 10; -fx-background-radius: 999; -fx-cursor: hand;";
+        String altBtnHover  = "-fx-background-color: #FFFFFF; -fx-text-fill: #000000; -fx-font-size: 12px; -fx-font-weight: 500; -fx-padding: 8 10; -fx-background-radius: 999; -fx-cursor: hand;";
+        seeAltBtn.setStyle(altBtnNormal);
+        seeAltBtn.setOnMouseEntered(e -> { seeAltBtn.setStyle(altBtnHover); animateScale(seeAltBtn, 1.03, 130); });
+        seeAltBtn.setOnMouseExited(e -> { seeAltBtn.setStyle(altBtnNormal); animateScale(seeAltBtn, 1.0, 130); });
+        seeAltBtn.setOnAction(e -> {
+            // Staggered spotlight pulse across the 4 ranked fix options
+            for (int i = 0; i < fixCards.size(); i++) {
+                final int idx = i;
+                VBox target = fixCards.get(idx);
+                Timeline pulse = new Timeline(
+                    new KeyFrame(Duration.millis(idx * 75.0)),
+                    new KeyFrame(Duration.millis(idx * 75.0 + 140),
+                        ev -> {
+                            if (selectedIdx[0] != idx) target.setStyle(cardHover);
+                            animateLiftAndScale(target, -9.0, 1.035, 140);
+                        }),
+                    new KeyFrame(Duration.millis(idx * 75.0 + 360),
+                        ev -> {
+                            boolean active = (selectedIdx[0] == idx);
+                            target.setStyle(active ? cardSelected : cardBase);
+                            animateLiftAndScale(target, active ? -3.0 : 0.0, active ? 1.01 : 1.0, 180);
+                        })
+                );
+                pulse.play();
+            }
+        });
+
+        cardsRow.getChildren().add(disruptedCard);
+        cardsRow.getChildren().addAll(fixCards);
 
         panel.getChildren().addAll(panelCaption, cardsRow);
         band.getChildren().addAll(header, panel);
@@ -739,7 +1158,9 @@ public class PublicWebsiteView extends StackPane {
     private VBox disruptionCard(String subTxt, String titleTxt, String metaTxt, boolean isDisrupted) {
         VBox card = new VBox(12);
         card.setPrefWidth(178);
-        card.setMinWidth(165);
+        card.setMinWidth(154);
+        card.setMaxWidth(184);
+        HBox.setHgrow(card, Priority.ALWAYS);
         card.setPadding(new Insets(14));
         card.setStyle(
             "-fx-background-color: " +
@@ -855,10 +1276,14 @@ public class PublicWebsiteView extends StackPane {
             HBox strip = new HBox(12);
             strip.setAlignment(Pos.CENTER_LEFT);
             strip.setPadding(new Insets(14, 18, 14, 16));
-            strip.setStyle(
+            String stripNormal =
                 "-fx-background-color: rgba(255, 255, 255, " + alphas[i] + ");" +
-                "-fx-background-radius: 14;"
-            );
+                "-fx-background-radius: 14;";
+            String stripHover =
+                "-fx-background-color: #FFFFFF;" +
+                "-fx-background-radius: 14;";
+            strip.setStyle(stripNormal);
+            strip.setCursor(Cursor.HAND);
 
             StackPane coralDot = new StackPane(UITheme.checkMarkIcon(Color.WHITE, 0.72));
             coralDot.setPrefSize(22, 22);
@@ -867,6 +1292,21 @@ public class PublicWebsiteView extends StackPane {
 
             Label lbl = medLabel(items[i], 14, "#000000");
             strip.getChildren().addAll(coralDot, lbl);
+
+            DropShadow stripHoverShadow = UITheme.softCardShadow();
+            strip.setOnMouseEntered(e -> {
+                strip.setStyle(stripHover);
+                strip.setEffect(stripHoverShadow);
+                animateTranslateX(strip, -8.0, 160);
+                animateScale(coralDot, 1.15, 160);
+            });
+            strip.setOnMouseExited(e -> {
+                strip.setStyle(stripNormal);
+                strip.setEffect(null);
+                animateTranslateX(strip, 0.0, 150);
+                animateScale(coralDot, 1.0, 150);
+            });
+
             frostedStack.getChildren().add(strip);
         }
 
@@ -920,31 +1360,34 @@ public class PublicWebsiteView extends StackPane {
         ds.setRadius(24);
         ds.setOffsetY(4);
         frame.setEffect(ds);
-        frame.setCache(true);
-        frame.setCacheHint(CacheHint.SPEED);
 
         // Left white sidebar inside preview
         VBox miniRail = new VBox(14);
-        miniRail.setPrefWidth(196);
+        miniRail.setPrefWidth(204);
         miniRail.setPadding(new Insets(18, 14, 18, 14));
         miniRail.setStyle("-fx-background-color: #FFFFFF; -fx-background-radius: 18 0 0 0;");
 
         HBox railTop = new HBox(UITheme.brandLogoMark(16, false), spacerRegion(), UITheme.inboxIcon(14, Color.web("#71717A")));
         Label newReport = medLabel("+  New incident", 12, "#000000");
+        newReport.setPadding(new Insets(5, 8, 5, 8));
+        String newRepNormal = "-fx-font-size: 12px; -fx-font-weight: 500; -fx-text-fill: #000000; -fx-background-color: transparent; -fx-background-radius: 8;";
+        String newRepHover  = "-fx-font-size: 12px; -fx-font-weight: 500; -fx-text-fill: #000000; -fx-background-color: #F4F4F5; -fx-background-radius: 8;";
+        newReport.setStyle(newRepNormal);
+        newReport.setMaxWidth(Double.MAX_VALUE);
         newReport.setCursor(Cursor.HAND);
+        newReport.setOnMouseEntered(e -> newReport.setStyle(newRepHover));
+        newReport.setOnMouseExited(e -> newReport.setStyle(newRepNormal));
         newReport.setOnMouseClicked(e -> onOpenAuth.accept(false));
 
-        VBox recents = new VBox(7);
+        VBox recents = new VBox(4);
         Label recHead = new Label("Recents");
-        recHead.setStyle("-fx-font-size: 11px; -fx-text-fill: #A1A1AA;");
-        Label r1 = new Label("PaymentGateway NPE");
-        Label r2 = new Label("HikariPool timeout");
-        Label r3 = new Label("JWT token refresh race");
-        for (Label r : new Label[]{r1, r2, r3}) {
-            r.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #3F3F46;");
-        }
-        recents.getChildren().addAll(recHead, r1, r2, r3);
-        miniRail.getChildren().addAll(railTop, newReport, recents);
+        recHead.setStyle("-fx-font-size: 11px; -fx-text-fill: #A1A1AA; -fx-padding: 0 8;");
+        String[] recentNames = {"PaymentGateway NPE", "HikariPool timeout", "JWT token refresh race"};
+        String[] bannerMsgs  = {
+            "Inspect Incident #402 · PaymentGateway NPE",
+            "Inspect Incident #398 · HikariPool timeout",
+            "Inspect Incident #391 · JWT token refresh race"
+        };
 
         // Main pastel sky/violet canvas inside preview matching live-05
         VBox innerCanvas = new VBox(16);
@@ -961,21 +1404,64 @@ public class PublicWebsiteView extends StackPane {
         Label subGreet = new Label("Paste a stack trace or inspect active alerts");
         subGreet.setStyle("-fx-font-size: 12.5px; -fx-text-fill: rgba(0,0,0,0.60);");
 
-        HBox banner = new HBox(8, UITheme.boltIcon(14, Color.web("#1B98F2")), medLabel("Inspect Incident #402 diagnosis", 12, "#18181B"), spacerRegion());
+        Label bannerText = medLabel(bannerMsgs[0], 12, "#18181B");
+        HBox banner = new HBox(8, UITheme.boltIcon(14, Color.web("#1B98F2")), bannerText, spacerRegion());
         banner.setAlignment(Pos.CENTER_LEFT);
         banner.setMaxWidth(420);
         banner.setPadding(new Insets(9, 14, 9, 14));
-        banner.setStyle("-fx-background-color: rgba(255,255,255,0.68); -fx-background-radius: 10;");
+        String bannerNormal = "-fx-background-color: rgba(255,255,255,0.72); -fx-background-radius: 10; -fx-border-color: transparent; -fx-border-radius: 10; -fx-border-width: 1;";
+        String bannerHover  = "-fx-background-color: #FFFFFF; -fx-background-radius: 10; -fx-border-color: rgba(27,152,242,0.35); -fx-border-radius: 10; -fx-border-width: 1;";
+        banner.setStyle(bannerNormal);
+        banner.setCursor(Cursor.HAND);
+        banner.setOnMouseEntered(e -> { banner.setStyle(bannerHover); animateScale(banner, 1.015, 140); });
+        banner.setOnMouseExited(e -> { banner.setStyle(bannerNormal); animateScale(banner, 1.0, 140); });
+        banner.setOnMouseClicked(e -> onOpenAuth.accept(false));
+
+        recents.getChildren().add(recHead);
+        final int[] activeRecent = {0};
+        final List<Label> recentRows = new java.util.ArrayList<>();
+        String recNormal = "-fx-font-size: 11.5px; -fx-text-fill: #52525B; -fx-padding: 5 8; -fx-background-color: transparent; -fx-background-radius: 7;";
+        String recHover  = "-fx-font-size: 11.5px; -fx-text-fill: #09090B; -fx-padding: 5 8; -fx-background-color: #F4F4F5; -fx-background-radius: 7;";
+        String recActive = "-fx-font-size: 11.5px; -fx-font-weight: 500; -fx-text-fill: #09090B; -fx-padding: 5 8; -fx-background-color: #EFF6FF; -fx-background-radius: 7;";
+
+        for (int i = 0; i < recentNames.length; i++) {
+            final int idx = i;
+            Label r = new Label(recentNames[i]);
+            r.setMaxWidth(Double.MAX_VALUE);
+            r.setCursor(Cursor.HAND);
+            r.setStyle(i == 0 ? recActive : recNormal);
+            recentRows.add(r);
+            r.setOnMouseEntered(e -> {
+                if (activeRecent[0] != idx) r.setStyle(recHover);
+            });
+            r.setOnMouseExited(e -> {
+                r.setStyle(activeRecent[0] == idx ? recActive : recNormal);
+            });
+            r.setOnMouseClicked(e -> {
+                activeRecent[0] = idx;
+                for (int k = 0; k < recentRows.size(); k++) {
+                    recentRows.get(k).setStyle(k == idx ? recActive : recNormal);
+                }
+                crossfadeLabelSwap(bannerText, bannerMsgs[idx]);
+            });
+            recents.getChildren().add(r);
+        }
+        miniRail.getChildren().addAll(railTop, newReport, recents);
 
         VBox promptBox = new VBox(18);
         promptBox.setMaxWidth(450);
         promptBox.setPadding(new Insets(16));
-        promptBox.setStyle("-fx-background-color: #FFFFFF; -fx-background-radius: 14;");
+        String promptNormal = "-fx-background-color: #FFFFFF; -fx-background-radius: 14; -fx-border-color: transparent; -fx-border-radius: 14; -fx-border-width: 1;";
+        String promptHover  = "-fx-background-color: #FFFFFF; -fx-background-radius: 14; -fx-border-color: rgba(0,0,0,0.12); -fx-border-radius: 14; -fx-border-width: 1;";
+        promptBox.setStyle(promptNormal);
         promptBox.setCursor(Cursor.HAND);
+        installCardLift(promptBox, -3.0, 1.01, null, UITheme.softCardShadow(), promptNormal, promptHover, null);
         promptBox.setOnMouseClicked(e -> onOpenAuth.accept(false));
         Label promptTxt = new Label("Ask anything or open real workspace...");
         promptTxt.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #71717A;");
-        HBox promptBottom = new HBox(new Label("+"), spacerRegion(), UITheme.serkoBlackPill("Open app", false));
+        Button openAppBtn = UITheme.serkoBlackPill("Open app", false);
+        openAppBtn.setOnAction(e -> onOpenAuth.accept(false));
+        HBox promptBottom = new HBox(new Label("+"), spacerRegion(), openAppBtn);
         promptBottom.setAlignment(Pos.CENTER_LEFT);
         promptBox.getChildren().addAll(promptTxt, promptBottom);
 
@@ -1054,18 +1540,30 @@ public class PublicWebsiteView extends StackPane {
         btn.setMaxWidth(Region.USE_PREF_SIZE);
         btn.setPadding(new Insets(10, 14, 10, 14));
         btn.setCursor(Cursor.HAND);
-        btn.setStyle(
+        String faqNormal =
             "-fx-background-color: #FFFFFF;" +
-            "-fx-border-color: rgba(0,0,0,0.07);" +
+            "-fx-border-color: rgba(0,0,0,0.08);" +
             "-fx-border-width: 1;" +
             "-fx-border-radius: 9 9 3 9;" +
-            "-fx-background-radius: 9 9 3 9;"
-        );
+            "-fx-background-radius: 9 9 3 9;";
+        String faqHover =
+            "-fx-background-color: #FAFAFA;" +
+            "-fx-border-color: rgba(0,0,0,0.20);" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 9 9 3 9;" +
+            "-fx-background-radius: 9 9 3 9;";
+        btn.setStyle(faqNormal);
         DropShadow ds = new DropShadow();
         ds.setColor(Color.rgb(0, 0, 0, 0.06));
         ds.setRadius(4);
         ds.setOffsetY(1);
         btn.setEffect(ds);
+
+        DropShadow dsHover = new DropShadow();
+        dsHover.setColor(Color.rgb(0, 0, 0, 0.11));
+        dsHover.setRadius(10);
+        dsHover.setOffsetY(3);
+        installCardLift(btn, -1.5, 1.012, ds, dsHover, faqNormal, faqHover);
 
         Label qLbl = new Label(q);
         qLbl.setWrapText(true);
@@ -1090,6 +1588,16 @@ public class PublicWebsiteView extends StackPane {
             open[0] = !open[0];
             aLbl.setVisible(open[0]);
             aLbl.setManaged(open[0]);
+            if (open[0]) {
+                aLbl.setOpacity(0);
+                aLbl.setTranslateY(-4);
+                FadeTransition ft = new FadeTransition(Duration.millis(180), aLbl);
+                ft.setToValue(1.0);
+                TranslateTransition tt = new TranslateTransition(Duration.millis(180), aLbl);
+                tt.setToY(0);
+                tt.setInterpolator(EASE_OUT);
+                new ParallelTransition(ft, tt).play();
+            }
             RotateTransition rt = new RotateTransition(Duration.millis(180), chev);
             rt.setToAngle(open[0] ? 180 : 0);
             rt.play();
@@ -1106,12 +1614,14 @@ public class PublicWebsiteView extends StackPane {
         footerWrap.setStyle("-fx-background-color: #FFFFFF;");
 
         // Full-width subtle dotted horizontal divider matching live-07-footer.png
-        HBox dividerBox = new HBox(UITheme.dottedDivider(1160));
+        Region footerDivider = UITheme.responsiveDottedDivider(1160);
+        HBox.setHgrow(footerDivider, Priority.ALWAYS);
+        HBox dividerBox = new HBox(footerDivider);
         dividerBox.setAlignment(Pos.CENTER);
         dividerBox.setPadding(new Insets(8, 56, 8, 56));
 
         VBox footer = new VBox(28);
-        footer.setPadding(new Insets(48, 64, 38, 64));
+        footer.setPadding(new Insets(48, 56, 38, 56));
 
         HBox topCols = new HBox(48);
         topCols.setAlignment(Pos.TOP_LEFT);
@@ -1135,7 +1645,7 @@ public class PublicWebsiteView extends StackPane {
         btnStartBlack.setOnAction(e -> onOpenAuth.accept(true));
         left.getChildren().addAll(darkMark, fHeadline, btnStartBlack);
 
-        HBox rightCols = new HBox(56);
+        HBox rightCols = new HBox(44);
         rightCols.setAlignment(Pos.TOP_LEFT);
         rightCols.getChildren().addAll(
             footerColumn("Explore", List.of(
@@ -1145,7 +1655,10 @@ public class PublicWebsiteView extends StackPane {
                 footerLink("About",     () -> navigateTo(Page.ABOUT))
             )),
             footerColumn("Capabilities", List.of(
-                footerLink("6-Agent pipeline", () -> navigateTo(Page.PLATFORM)),
+                footerLink("6-Agent pipeline", () -> {
+                    navigateTo(Page.PLATFORM);
+                    Platform.runLater(() -> scrollPane.setVvalue(0.32));
+                }),
                 footerLink("Quick LLM triage", () -> navigateTo(Page.PLATFORM)),
                 footerLink("MTTR analytics",   () -> navigateTo(Page.FOR_TEAMS))
             )),
@@ -1206,9 +1719,9 @@ public class PublicWebsiteView extends StackPane {
         hero.setMinHeight(760);
         hero.getStyleClass().add("serko-platform-halo-bg");
 
-        VBox content = new VBox(20);
+        VBox content = new VBox(14);
         content.setAlignment(Pos.CENTER);
-        content.setPadding(new Insets(138, 56, 48, 56));
+        content.setPadding(new Insets(82, 56, 40, 56));
         content.setMaxWidth(900);
 
         Label eyebrow = UITheme.eyebrowLabel("AI incident software");
@@ -1232,31 +1745,42 @@ public class PublicWebsiteView extends StackPane {
         btnFaq.setOnAction(e -> scrollPane.setVvalue(faqAnchorFraction));
         HBox ctas = new HBox(10, btnTry, btnFaq);
         ctas.setAlignment(Pos.CENTER);
-        ctas.setPadding(new Insets(4, 0, 24, 0));
+        ctas.setPadding(new Insets(0, 0, 8, 0));
 
         // Interactive Platform Composer Card matching live-08-platform.png
         VBox composerCard = new VBox(14);
-        composerCard.setMaxWidth(580);
+        composerCard.setMaxWidth(640);
         composerCard.setPadding(new Insets(22));
-        composerCard.setStyle(
+        String compCardNormal =
             "-fx-background-color: #FFFFFF; -fx-background-radius: 18;" +
-            "-fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 18;"
-        );
-        composerCard.setEffect(UITheme.softCardShadow());
+            "-fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 18; -fx-border-width: 1;";
+        String compCardHover =
+            "-fx-background-color: #FFFFFF; -fx-background-radius: 18;" +
+            "-fx-border-color: rgba(27,152,242,0.32); -fx-border-radius: 18; -fx-border-width: 1;";
+        composerCard.setStyle(compCardNormal);
+        DropShadow compShadow = UITheme.softCardShadow();
+        composerCard.setEffect(compShadow);
+        installCardLift(composerCard, -3.5, 1.008, compShadow, UITheme.elevatedCardShadow(), compCardNormal, compCardHover);
 
         HBox topFields = new HBox(24);
-        VBox f1 = new VBox(4, microCap("SERVICE / MODULE"), medLabel("checkout-api · PaymentLedgerDao", 13, "#71717A"));
-        VBox f2 = new VBox(4, microCap("SEVERITY"), medLabel("Critical · Open", 13, "#71717A"));
+        Label svcVal = medLabel("checkout-api · PaymentLedgerDao", 13, "#71717A");
+        Label sevVal = medLabel("Critical · Open", 13, "#71717A");
+        VBox f1 = new VBox(4, microCap("SERVICE / MODULE"), svcVal);
+        VBox f2 = new VBox(4, microCap("SEVERITY"), sevVal);
         HBox.setHgrow(f1, Priority.ALWAYS);
         topFields.getChildren().addAll(f1, f2);
 
-        Line sep = new Line(0, 0, 530, 0);
-        sep.setStroke(Color.web("#F4F4F5"));
+        Region sep = new Region();
+        sep.setMinHeight(1);
+        sep.setPrefHeight(1);
+        sep.setMaxHeight(1);
+        sep.setMaxWidth(Double.MAX_VALUE);
+        sep.setStyle("-fx-background-color: #F4F4F5;");
 
-        VBox detailsBlock = new VBox(8);
+        VBox detailsBlock = new VBox(10);
         detailsBlock.getChildren().add(microCap("ERROR LOG DETAILS AND CONTEXT"));
 
-        HBox tokenPreview = new HBox(6);
+        FlowPane tokenPreview = new FlowPane(6, 6);
         tokenPreview.setAlignment(Pos.CENTER_LEFT);
         Label tPre = new Label("Saw");
         Label tErr = highlightToken("SQLTransientConnectionException", "#F3E8FF", "#6B21A8");
@@ -1268,22 +1792,113 @@ public class PublicWebsiteView extends StackPane {
         }
         tokenPreview.getChildren().addAll(tPre, tErr, tMid, tMod, tEnd);
 
-        HBox bottomActionRow = new HBox(spacerRegion(), UITheme.serkoWhitePill("Analyze trace", false));
-        ((Button) bottomActionRow.getChildren().get(0)).setOnAction(e -> onOpenAuth.accept(false));
-        detailsBlock.getChildren().addAll(tokenPreview, bottomActionRow);
+        // Simulated 6-agent pipeline demo panel (clearly framed as product sample preview)
+        VBox simOutputBox = new VBox(6);
+        simOutputBox.setPadding(new Insets(12, 14, 12, 14));
+        simOutputBox.setStyle("-fx-background-color: #EFF6FF; -fx-border-color: #DBEAFE; -fx-border-width: 1; -fx-border-radius: 12; -fx-background-radius: 12;");
+        HBox simTop = new HBox(6, UITheme.positiveBadge("Sample 6-agent trace"), UITheme.neutralTag("Pipeline demo"));
+        simTop.setAlignment(Pos.CENTER_LEFT);
+        Label simRoot = new Label("Root cause: Connections leaked on retry loop in recordSettlement() holding transactions past 30s maxLifetime.");
+        simRoot.setWrapText(true);
+        simRoot.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #18181B; -fx-font-weight: 500;");
+        Label simFix = new Label("Remediation: Wrap ledger writes in @Transactional(timeout = 10) and enable leakDetectionThreshold=5000.");
+        simFix.setWrapText(true);
+        simFix.setStyle(UITheme.monoStyle(11.5, "#1D4ED8"));
+        simOutputBox.getChildren().addAll(simTop, simRoot, simFix);
+        simOutputBox.setVisible(false);
+        simOutputBox.setManaged(false);
+
+        // Sample selector pills + Inspect output toggle + Analyze CTA
+        String[] sampleChips = {"HikariPool", "ExpiredJwt", "NullPointer"};
+        HBox chipTrack = new HBox(5);
+        chipTrack.setAlignment(Pos.CENTER_LEFT);
+        List<Button> chipBtns = new ArrayList<>();
+        String cActive = "-fx-background-color: #09090B; -fx-text-fill: #FFFFFF; -fx-font-size: 11px; -fx-font-weight: 500; -fx-padding: 4 10; -fx-background-radius: 999; -fx-cursor: hand;";
+        String cIdle   = "-fx-background-color: #F4F4F5; -fx-text-fill: #52525B; -fx-font-size: 11px; -fx-font-weight: 500; -fx-padding: 4 10; -fx-background-radius: 999; -fx-cursor: hand;";
+        for (String name : sampleChips) {
+            Button cb = new Button(name);
+            cb.setMinWidth(Region.USE_PREF_SIZE);
+            chipBtns.add(cb);
+            chipTrack.getChildren().add(cb);
+        }
+
+        Button btnInspectDemo = UITheme.serkoWhitePill("Inspect agent output", false);
+        btnInspectDemo.setPadding(new Insets(7, 14, 7, 14));
+        btnInspectDemo.setOnAction(e -> {
+            boolean show = !simOutputBox.isVisible();
+            simOutputBox.setVisible(show);
+            simOutputBox.setManaged(show);
+            btnInspectDemo.setText(show ? "Hide agent output" : "Inspect agent output");
+        });
+
+        Button btnAnalyze = UITheme.serkoBlackPill("Analyze trace", true);
+        btnAnalyze.setPadding(new Insets(8, 18, 8, 18));
+        btnAnalyze.setOnAction(e -> onOpenAuth.accept(false));
+        HBox bottomActionRow = new HBox(8, chipTrack, spacerRegion(), btnInspectDemo, btnAnalyze);
+        bottomActionRow.setAlignment(Pos.CENTER_LEFT);
+        detailsBlock.getChildren().addAll(tokenPreview, simOutputBox, bottomActionRow);
 
         composerCard.getChildren().addAll(topFields, sep, detailsBlock);
 
         String[][] tokenSamples = {
-            {"SQLTransientConnectionException", "HikariPool-1"},
-            {"ExpiredJwtException", "/api/incidents/my"},
-            {"NullPointerException", "PaymentGateway.authorize"}
+            {
+                "SQLTransientConnectionException", "HikariPool-1",
+                "checkout-api · PaymentLedgerDao", "Critical · Open", "Saw", "after 30s on", "settlement path.",
+                "Root cause: Connections leaked on retry loop in recordSettlement() holding transactions past 30s maxLifetime.",
+                "Remediation: Wrap ledger writes in @Transactional(timeout = 10) and set leakDetectionThreshold=5000."
+            },
+            {
+                "ExpiredJwtException", "/api/incidents/my",
+                "auth-filter · JwtAuthFilter", "High · Investigating", "Threw", "validating bearer token at", "with 45ms skew.",
+                "Root cause: Access token clock skew across edge replica nodes rejected borderline tokens before refresh.",
+                "Remediation: Configure Jwts.parser().clockSkewSeconds(30) and align NTP daemon sync."
+            },
+            {
+                "NullPointerException", "PaymentGateway.authorize",
+                "billing-core · GatewayClient", "Critical · Open", "Hit", "dereferencing merchant metadata inside", "at line 418.",
+                "Root cause: Optional PSP settlement map returned null when multi-currency flag is unset on sandbox accounts.",
+                "Remediation: Guard null settlement metadata with Optional.ofNullable(...) and fallback currency ISO check."
+            }
         };
         final int[] sIdx = {0};
-        typewriterTimeline = new Timeline(new KeyFrame(Duration.seconds(3.2), ev -> {
-            sIdx[0] = (sIdx[0] + 1) % tokenSamples.length;
-            tErr.setText(tokenSamples[sIdx[0]][0]);
-            tMod.setText(tokenSamples[sIdx[0]][1]);
+        final boolean[] manualLocked = {false};
+        Runnable applySample = () -> {
+            int i = sIdx[0];
+            for (int k = 0; k < chipBtns.size(); k++) {
+                chipBtns.get(k).setStyle(k == i ? cActive : cIdle);
+            }
+            String[] row = tokenSamples[i];
+            crossfadeLabelSwap(tErr, row[0]);
+            crossfadeLabelSwap(tMod, row[1]);
+            crossfadeLabelSwap(svcVal, row[2]);
+            crossfadeLabelSwap(sevVal, row[3]);
+            tPre.setText(row[4]);
+            tMid.setText(row[5]);
+            tEnd.setText(row[6]);
+            simRoot.setText(row[7]);
+            simFix.setText(row[8]);
+        };
+        for (int k = 0; k < chipBtns.size(); k++) {
+            final int sampleIdx = k;
+            chipBtns.get(k).setStyle(k == 0 ? cActive : cIdle);
+            chipBtns.get(k).setOnAction(e -> {
+                manualLocked[0] = true;
+                if (typewriterTimeline != null) typewriterTimeline.stop();
+                sIdx[0] = sampleIdx;
+                applySample.run();
+                if (!simOutputBox.isVisible()) {
+                    simOutputBox.setVisible(true);
+                    simOutputBox.setManaged(true);
+                    btnInspectDemo.setText("Hide agent output");
+                }
+            });
+        }
+
+        typewriterTimeline = new Timeline(new KeyFrame(Duration.seconds(3.6), ev -> {
+            if (!manualLocked[0]) {
+                sIdx[0] = (sIdx[0] + 1) % tokenSamples.length;
+                applySample.run();
+            }
         }));
         typewriterTimeline.setCycleCount(Timeline.INDEFINITE);
         typewriterTimeline.play();
@@ -1330,15 +1945,45 @@ public class PublicWebsiteView extends StackPane {
             {"6. Report Generation Agent",     "Agent 6 of 6", "Compiles an executive summary and structured Markdown report persisted directly to the database."}
         };
 
-        for (String[] st : stages) {
+        String sbNormal = "-fx-background-color: #F6F6F6; -fx-text-fill: #3F3F46; -fx-font-weight: 500; -fx-font-size: 13.5px; -fx-padding: 13 18; -fx-background-radius: 12; -fx-border-color: transparent; -fx-border-radius: 12; -fx-border-width: 1.5; -fx-cursor: hand;";
+        String sbHover  = "-fx-background-color: #ECECEE; -fx-text-fill: #000000; -fx-font-weight: 500; -fx-font-size: 13.5px; -fx-padding: 13 18; -fx-background-radius: 12; -fx-border-color: transparent; -fx-border-radius: 12; -fx-border-width: 1.5; -fx-cursor: hand;";
+        String sbActive = "-fx-background-color: #FFFFFF; -fx-text-fill: #000000; -fx-font-weight: 600; -fx-font-size: 13.5px; -fx-padding: 13 18; -fx-background-radius: 12; -fx-border-color: #1B98F2; -fx-border-radius: 12; -fx-border-width: 1.5; -fx-cursor: hand;";
+
+        final int[] activeStageIdx = {0};
+        final List<Button> stageBtns = new java.util.ArrayList<>();
+        for (int i = 0; i < stages.length; i++) {
+            final int idx = i;
+            String[] st = stages[i];
             Button sb = new Button(st[0]);
             sb.setMaxWidth(Double.MAX_VALUE);
             sb.setAlignment(Pos.CENTER_LEFT);
-            sb.setStyle("-fx-background-color: #F6F6F6; -fx-text-fill: #000000; -fx-font-weight: 500; -fx-font-size: 13.5px; -fx-padding: 13 18; -fx-background-radius: 12; -fx-cursor: hand;");
+            sb.setStyle(i == 0 ? sbActive : sbNormal);
+            sb.setEffect(i == 0 ? UITheme.softCardShadow() : null);
+            stageBtns.add(sb);
+
+            sb.setOnMouseEntered(e -> {
+                if (activeStageIdx[0] != idx) {
+                    sb.setStyle(sbHover);
+                    animateTranslateX(sb, 4.0, 140);
+                }
+            });
+            sb.setOnMouseExited(e -> {
+                if (activeStageIdx[0] != idx) {
+                    sb.setStyle(sbNormal);
+                    animateTranslateX(sb, 0.0, 140);
+                }
+            });
             sb.setOnAction(e -> {
+                activeStageIdx[0] = idx;
+                for (int k = 0; k < stageBtns.size(); k++) {
+                    boolean active = (k == idx);
+                    stageBtns.get(k).setStyle(active ? sbActive : sbNormal);
+                    stageBtns.get(k).setEffect(active ? UITheme.softCardShadow() : null);
+                    animateTranslateX(stageBtns.get(k), active ? 4.0 : 0.0, 150);
+                }
                 detStage.setText(st[1]);
-                detTitle.setText(st[0]);
-                detDesc.setText(st[2]);
+                crossfadeLabelSwap(detTitle, st[0]);
+                crossfadeLabelSwap(detDesc, st[2]);
             });
             stepList.getChildren().add(sb);
         }
@@ -1380,7 +2025,7 @@ public class PublicWebsiteView extends StackPane {
 
     private Label microCap(String text) {
         Label l = new Label(text);
-        l.setStyle("-fx-font-size: 10px; -fx-font-weight: 600; -fx-text-fill: #9CA3AF; -fx-letter-spacing: 0.6px;");
+        l.setStyle("-fx-font-size: 10px; -fx-font-weight: 600; -fx-text-fill: #9CA3AF;");
         return l;
     }
 
@@ -1455,8 +2100,13 @@ public class PublicWebsiteView extends StackPane {
         VBox c = new VBox(8);
         c.setPrefWidth(220);
         c.setPadding(new Insets(16));
-        c.setStyle("-fx-background-color: #FFFFFF; -fx-background-radius: 16; -fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 16;");
-        c.setEffect(UITheme.softCardShadow());
+        String cNormal = "-fx-background-color: #FFFFFF; -fx-background-radius: 16; -fx-border-color: rgba(0,0,0,0.06); -fx-border-radius: 16; -fx-border-width: 1;";
+        String cHover  = "-fx-background-color: #FFFFFF; -fx-background-radius: 16; -fx-border-color: rgba(27,152,242,0.38); -fx-border-radius: 16; -fx-border-width: 1;";
+        c.setStyle(cNormal);
+        DropShadow baseSh = UITheme.softCardShadow();
+        c.setEffect(baseSh);
+        c.setCursor(Cursor.HAND);
+        installCardLift(c, -4.5, 1.02, baseSh, UITheme.elevatedCardShadow(), cNormal, cHover);
         Label s = medLabel(service, 14.5, "#000000");
         Label r = new Label(region);
         r.setStyle("-fx-font-size: 12px; -fx-text-fill: #71717A;");
@@ -1469,8 +2119,11 @@ public class PublicWebsiteView extends StackPane {
     private VBox enterpriseCard(String ey, String title, String desc, String bg) {
         VBox c = new VBox(12);
         c.setPadding(new Insets(26));
-        c.setStyle("-fx-background-color: " + bg + "; -fx-background-radius: 20;");
+        String eNormal = "-fx-background-color: " + bg + "; -fx-background-radius: 20; -fx-border-color: transparent; -fx-border-radius: 20; -fx-border-width: 1;";
+        String eHover  = "-fx-background-color: " + bg + "; -fx-background-radius: 20; -fx-border-color: rgba(0,0,0,0.12); -fx-border-radius: 20; -fx-border-width: 1;";
+        c.setStyle(eNormal);
         HBox.setHgrow(c, Priority.ALWAYS);
+        installCardLift(c, -4.0, 1.012, null, UITheme.softCardShadow(), eNormal, eHover);
         Label e = UITheme.eyebrowLabel(ey);
         Label t = medLabel(title, 20, "#000000");
         t.setWrapText(true);
@@ -1527,7 +2180,7 @@ public class PublicWebsiteView extends StackPane {
             UITheme.eyebrowLabel("Our vision"),
             medLabel("Always in your corner when production alerts fire.", 28, "#000000"),
             paraLabel("Modern distributed services generate thousands of log lines before anyone opens a terminal. IncidentIQ bridges raw telemetry with an orchestrated 6-agent pipeline built specifically for Spring Boot, cloud APIs, and JVM services."),
-            UITheme.dottedDivider(680),
+            UITheme.responsiveDottedDivider(680),
             medLabel("AI-native by design", 22, "#000000"),
             paraLabel("Rather than pasting a prompt box over static tables, IncidentIQ connects authenticated JWT sessions, JPA incident lifecycles, sub-second Groq inference, and Gemini fallbacks into a cohesive desktop workbench.")
         );
@@ -1541,7 +2194,127 @@ public class PublicWebsiteView extends StackPane {
         );
     }
 
-    // ── Shared Helpers ──────────────────────────────────────────
+    // ── Shared Helpers & Motion Utilities ───────────────────────
+
+    private void installCardLift(Region node, double hoverLiftY, double hoverScale,
+                                 Effect baseEffect, Effect hoverEffect,
+                                 String normalStyle, String hoverStyle) {
+        installCardLift(node, hoverLiftY, hoverScale, baseEffect, hoverEffect, normalStyle, hoverStyle, null);
+    }
+
+    private void installCardLift(Region node, double hoverLiftY, double hoverScale,
+                                 Effect baseEffect, Effect hoverEffect,
+                                 String normalStyle, String hoverStyle,
+                                 Consumer<Boolean> onHoverState) {
+        node.setOnMouseEntered(e -> {
+            if (onHoverState != null) onHoverState.accept(true);
+            if (hoverStyle != null) node.setStyle(hoverStyle);
+            if (hoverEffect != null) node.setEffect(hoverEffect);
+            animateLiftAndScale(node, hoverLiftY, hoverScale, 165);
+        });
+        node.setOnMouseExited(e -> {
+            if (onHoverState != null) onHoverState.accept(false);
+            if (normalStyle != null) node.setStyle(normalStyle);
+            node.setEffect(baseEffect);
+            animateLiftAndScale(node, 0.0, 1.0, 150);
+        });
+    }
+
+    private void animateLiftAndScale(Node node, double toY, double toScale, double millis) {
+        Object prev = node.getProperties().get("liftAnim");
+        if (prev instanceof Animation a) a.stop();
+
+        TranslateTransition tt = new TranslateTransition(Duration.millis(millis), node);
+        tt.setToY(toY);
+        tt.setInterpolator(EASE_OUT);
+
+        ScaleTransition st = new ScaleTransition(Duration.millis(millis), node);
+        st.setToX(toScale);
+        st.setToY(toScale);
+        st.setInterpolator(EASE_OUT);
+
+        ParallelTransition pt = new ParallelTransition(tt, st);
+        node.getProperties().put("liftAnim", pt);
+        pt.play();
+    }
+
+    private void animateScale(Node node, double toScale, double millis) {
+        Object prev = node.getProperties().get("scaleAnim");
+        if (prev instanceof Animation a) a.stop();
+
+        ScaleTransition st = new ScaleTransition(Duration.millis(millis), node);
+        st.setToX(toScale);
+        st.setToY(toScale);
+        st.setInterpolator(EASE_OUT);
+        node.getProperties().put("scaleAnim", st);
+        st.play();
+    }
+
+    private void animateTranslateX(Node node, double toX, double millis) {
+        Object prev = node.getProperties().get("txAnim");
+        if (prev instanceof Animation a) a.stop();
+
+        TranslateTransition tt = new TranslateTransition(Duration.millis(millis), node);
+        tt.setToX(toX);
+        tt.setInterpolator(EASE_OUT);
+        node.getProperties().put("txAnim", tt);
+        tt.play();
+    }
+
+    private void crossfadeLabelSwap(Label lbl, String nextText) {
+        Object prev = lbl.getProperties().get("swapAnim");
+        if (prev instanceof Animation a) a.stop();
+        lbl.setTranslateY(0);
+
+        FadeTransition out = new FadeTransition(Duration.millis(110), lbl);
+        out.setToValue(0.15);
+        out.setOnFinished(e -> {
+            lbl.setText(nextText);
+            lbl.setTranslateY(4);
+            FadeTransition in = new FadeTransition(Duration.millis(180), lbl);
+            in.setToValue(1.0);
+            in.setInterpolator(EASE_OUT);
+            TranslateTransition slide = new TranslateTransition(Duration.millis(180), lbl);
+            slide.setToY(0);
+            slide.setInterpolator(EASE_OUT);
+            ParallelTransition pt = new ParallelTransition(in, slide);
+            lbl.getProperties().put("swapAnim", pt);
+            pt.play();
+        });
+        lbl.getProperties().put("swapAnim", out);
+        out.play();
+    }
+
+    private <T extends Region> T withScrollReveal(T band) {
+        band.setOpacity(0.92);
+        band.setTranslateY(12.0);
+        band.getProperties().put("revealed", false);
+        revealBands.add(band);
+        return band;
+    }
+
+    private void checkScrollReveals() {
+        if (revealBands.isEmpty() || scrollPane.getScene() == null) return;
+        Bounds vpScene = scrollPane.localToScene(scrollPane.getBoundsInLocal());
+        if (vpScene == null || vpScene.getHeight() <= 0) return;
+
+        for (Region band : revealBands) {
+            if (Boolean.TRUE.equals(band.getProperties().get("revealed"))) continue;
+            Bounds bScene = band.localToScene(band.getBoundsInLocal());
+            if (bScene != null && bScene.getMinY() <= vpScene.getMaxY() - 48) {
+                band.getProperties().put("revealed", true);
+                FadeTransition ft = new FadeTransition(Duration.millis(300), band);
+                ft.setToValue(1.0);
+                ft.setInterpolator(EASE_OUT);
+
+                TranslateTransition tt = new TranslateTransition(Duration.millis(340), band);
+                tt.setToY(0.0);
+                tt.setInterpolator(EASE_OUT);
+
+                new ParallelTransition(ft, tt).play();
+            }
+        }
+    }
 
     private GridPane twoColumnSectionGrid(double hgap) {
         GridPane grid = new GridPane();

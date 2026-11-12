@@ -40,6 +40,8 @@
   let width = 0, height = 0, dpr = 1;
   let paused = false;
   let rafId = 0;
+  let targetPtrX = 0, targetPtrY = 0;
+  let ptrX = 0, ptrY = 0;
 
   window.setGlobePaused = function(flag) {
     const next = Boolean(flag);
@@ -49,6 +51,11 @@
       lastPaint = performance.now();
       rafId = requestAnimationFrame(frame);
     }
+  };
+
+  window.setGlobePointer = function(nx, ny) {
+    targetPtrX = Math.max(-1, Math.min(1, Number(nx) || 0));
+    targetPtrY = Math.max(-1, Math.min(1, Number(ny) || 0));
   };
 
   function getSphereGeometry() {
@@ -152,21 +159,26 @@
   function frame(now) {
     rafId = 0;
     if (paused) return;
-    if (now - lastPaint < 30) {
+    if (now - lastPaint < 16) {
       rafId = requestAnimationFrame(frame);
       return;
     }
-    const dt = Math.min(0.08, (now - lastPaint) / 1000);
+    const dt = Math.min(0.06, (now - lastPaint) / 1000);
     lastPaint = now;
-    t += dt * 0.32;
+    t += dt * 0.34;
+    ptrX += (targetPtrX - ptrX) * 0.08;
+    ptrY += (targetPtrY - ptrY) * 0.08;
     ctx.clearRect(0, 0, width, height);
 
-    const { cx, cy, radius } = getSphereGeometry();
-    const rotY = t * 0.42;
-    const rotX = -0.28;
+    const geom = getSphereGeometry();
+    const cx = geom.cx + ptrX * 7;
+    const cy = geom.cy + ptrY * 5;
+    const radius = geom.radius;
+    const rotY = t * 0.42 + ptrX * 0.24;
+    const rotX = -0.28 + ptrY * 0.14;
 
     // 1. Atmospheric translucent glass sphere + soft sky aura
-    ctx.drawImage(auraCanvas, 0, 0, width, height);
+    ctx.drawImage(auraCanvas, ptrX * 7, ptrY * 5, width, height);
 
     // 2. Subtle thin dark charcoal outer rim ring
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.28)';
@@ -270,13 +282,57 @@
         ctx.stroke();
 
         const progress = ((t * 0.65 + idx * 0.22) % 1);
-        const orbPt = pts[Math.min(steps, Math.floor(progress * steps))];
+        const orbIdx = Math.min(steps, Math.floor(progress * steps));
+        const orbPt = pts[orbIdx];
         if (orbPt && orbPt.z > 0.1) {
-          ctx.fillStyle = 'rgba(27, 152, 242, 0.85)';
+          // Subtle fading tail along orbital arc
+          for (let trail = 2; trail >= 1; trail--) {
+            const tIdx = Math.max(0, orbIdx - trail);
+            const tPt = pts[tIdx];
+            if (tPt && tPt.z > 0.08) {
+              ctx.fillStyle = trail === 1 ? 'rgba(27, 152, 242, 0.42)' : 'rgba(207, 105, 224, 0.22)';
+              ctx.beginPath();
+              ctx.arc(tPt.sx, tPt.sy, trail === 1 ? 1.8 : 1.4, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          ctx.fillStyle = 'rgba(27, 152, 242, 0.24)';
           ctx.beginPath();
-          ctx.arc(orbPt.sx, orbPt.sy, 2.2, 0, Math.PI * 2);
+          ctx.arc(orbPt.sx, orbPt.sy, 5.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = 'rgba(27, 152, 242, 0.92)';
+          ctx.beginPath();
+          ctx.arc(orbPt.sx, orbPt.sy, 2.3, 0, Math.PI * 2);
           ctx.fill();
         }
+      }
+    });
+
+    // 6. Live pulsing hub beacons on visible hemisphere
+    const activeAlertHub = Math.floor(t * 0.35) % hubs.length;
+    hubs.forEach((hub, hIdx) => {
+      const rp = rotateVec(latLonToVec(hub.lat, hub.lon), rotY, rotX);
+      if (rp.z > 0.14) {
+        const hx = cx + rp.x * radius;
+        const hy = cy - rp.y * radius;
+        const isWatchHub = hIdx === activeAlertHub;
+        const pulse = (t * 1.45 + hIdx * 0.28) % 1;
+        const rippleR = 2.5 + pulse * 10.5;
+        const rippleAlpha = (1 - pulse) * (isWatchHub ? 0.48 : 0.26);
+
+        ctx.strokeStyle = isWatchHub
+          ? `rgba(245, 98, 147, ${rippleAlpha})`
+          : `rgba(27, 152, 242, ${rippleAlpha})`;
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.arc(hx, hy, rippleR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = isWatchHub ? 'rgba(245, 98, 147, 0.92)' : 'rgba(17, 24, 39, 0.78)';
+        ctx.beginPath();
+        ctx.arc(hx, hy, isWatchHub ? 2.4 : 1.9, 0, Math.PI * 2);
+        ctx.fill();
       }
     });
 

@@ -7,21 +7,27 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import com.agentops.UI.ApiClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.VPos;
+import javafx.scene.Cursor;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -32,7 +38,9 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.shape.StrokeLineJoin;
 import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
+import javafx.util.Duration;
 
 /**
  * Inside Workspace: Operate-aligned Operational Telemetry & AI Metrics View.
@@ -53,6 +61,7 @@ public class AnalyticsView extends ScrollPane {
     private Canvas trendCanvas;
     private Label lblTrendRange;
     private final List<DayPoint> dayPoints = new ArrayList<>();
+    private int hoveredDayIdx = -1;
 
     // Distributions & AI rates
     private VBox distributionList;
@@ -61,10 +70,65 @@ public class AnalyticsView extends ScrollPane {
     private Label lastUpdatedLbl;
     private Circle syncDot;
 
+    // Interactivity & live polling
+    private BiConsumer<String, String> onNavigateFilter;
+    private Consumer<String> onNotifyToast;
+    private Button btnLiveToggle;
+    private Circle liveDot;
+    private Timeline autoRefreshTimeline;
+    private boolean autoRefreshEnabled = false;
+    private boolean sceneActive = false;
+
     private record DayPoint(String day, long count) {}
 
     public AnalyticsView() {
         buildUI();
+    }
+
+    public void setOnNavigateFilter(BiConsumer<String, String> onNavigateFilter) {
+        this.onNavigateFilter = onNavigateFilter;
+    }
+
+    public void setOnNotifyToast(Consumer<String> onNotifyToast) {
+        this.onNotifyToast = onNotifyToast;
+    }
+
+    public void setSceneActive(boolean active) {
+        this.sceneActive = active;
+        syncAutoRefreshTimer();
+    }
+
+    public void setAutoRefresh(boolean enabled) {
+        this.autoRefreshEnabled = enabled;
+        if (btnLiveToggle != null) {
+            liveDot.setFill(Color.web(enabled ? UITheme.POS_DOT : UITheme.INK_DIM));
+            btnLiveToggle.setText(enabled ? "Live: 30s" : "Live: Off");
+            btnLiveToggle.setStyle(enabled
+                ? "-fx-background-color: #F0FDF4; -fx-text-fill: #166534; -fx-border-color: #BBF7D0; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8; -fx-font-size: 13px; -fx-font-weight: 500; -fx-padding: 7.5 14; -fx-cursor: hand;"
+                : "");
+            if (!enabled) {
+                btnLiveToggle.getStyleClass().setAll("button", "ws-btn-secondary");
+            }
+        }
+        syncAutoRefreshTimer();
+        if (enabled) {
+            refreshDashboard();
+            if (onNotifyToast != null) onNotifyToast.accept("Live 30s analytics polling enabled");
+        } else if (onNotifyToast != null) {
+            onNotifyToast.accept("Live analytics polling paused");
+        }
+    }
+
+    private void syncAutoRefreshTimer() {
+        if (autoRefreshEnabled && sceneActive) {
+            if (autoRefreshTimeline == null) {
+                autoRefreshTimeline = new Timeline(new KeyFrame(Duration.seconds(30), e -> refreshDashboard()));
+                autoRefreshTimeline.setCycleCount(Timeline.INDEFINITE);
+            }
+            autoRefreshTimeline.play();
+        } else if (autoRefreshTimeline != null) {
+            autoRefreshTimeline.stop();
+        }
     }
 
     private void buildUI() {
@@ -108,10 +172,15 @@ public class AnalyticsView extends ScrollPane {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
+        liveDot = new Circle(3.5, Color.web(UITheme.INK_DIM));
+        btnLiveToggle = UITheme.wsSecondaryBtn("Live: Off", liveDot);
+        btnLiveToggle.setTooltip(new Tooltip("Toggle automatic 30-second telemetry polling"));
+        btnLiveToggle.setOnAction(e -> setAutoRefresh(!autoRefreshEnabled));
+
         Button btnRefresh = UITheme.wsSecondaryBtn("Refresh metrics", UITheme.refreshIcon(14, Color.web("#52525B")));
         btnRefresh.setOnAction(e -> refreshDashboard());
 
-        row.getChildren().addAll(titles, spacer, btnRefresh);
+        row.getChildren().addAll(titles, spacer, btnLiveToggle, btnRefresh);
         return row;
     }
 
@@ -206,6 +275,14 @@ public class AnalyticsView extends ScrollPane {
         trendCanvas = new Canvas(600, 236);
         trendCanvas.widthProperty().bind(canvasHost.widthProperty());
         trendCanvas.widthProperty().addListener((obs, oldW, newW) -> drawTrendChart());
+        trendCanvas.setOnMouseMoved(ev -> handleTrendHover(ev.getX(), ev.getY()));
+        trendCanvas.setOnMouseExited(ev -> {
+            trendCanvas.setCursor(Cursor.DEFAULT);
+            if (hoveredDayIdx != -1) {
+                hoveredDayIdx = -1;
+                drawTrendChart();
+            }
+        });
         canvasHost.getChildren().add(trendCanvas);
 
         chartCard.getChildren().addAll(chartHead, canvasHost);
@@ -217,12 +294,18 @@ public class AnalyticsView extends ScrollPane {
         distCard.setPadding(new Insets(18, 20, 18, 20));
         distCard.setStyle(UITheme.cardStyle());
 
+        HBox distHead = new HBox(8);
+        distHead.setAlignment(Pos.CENTER_LEFT);
         Label dTitle = new Label("Severity & status breakdown");
         dTitle.setStyle("-fx-font-size: 14.5px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
+        Region dSp = new Region(); HBox.setHgrow(dSp, Priority.ALWAYS);
+        Label dHint = new Label("Click row to filter");
+        dHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #71717A;");
+        distHead.getChildren().addAll(dTitle, dSp, dHint);
 
-        distributionList = new VBox(9);
+        distributionList = new VBox(6);
         renderDistributions(0, mapper.createObjectNode(), mapper.createObjectNode());
-        distCard.getChildren().addAll(dTitle, distributionList);
+        distCard.getChildren().addAll(distHead, distributionList);
 
         row.getChildren().addAll(chartCard, distCard);
         return row;
@@ -352,7 +435,9 @@ public class AnalyticsView extends ScrollPane {
     public void applyDashboardData(JsonNode root) {
         long   total    = root.path("totalIncidents").asLong(0);
         long   open     = root.path("openIncidents").asLong(0);
+        long   investigating = root.path("investigatingIncidents").asLong(0);
         long   resolved = root.path("resolvedIncidents").asLong(0);
+        long   closed   = root.path("closedIncidents").asLong(0);
         long   critical = root.path("criticalIncidents").asLong(0);
         double mttr     = root.path("averageResolutionTimeHours").asDouble(0.0);
         double resRate  = root.path("resolutionRatePercentage").asDouble(0.0);
@@ -365,10 +450,10 @@ public class AnalyticsView extends ScrollPane {
         long   manCount = ai.path("manualInvestigations").asLong(0);
 
         lblTotalVal.setText(String.valueOf(total));
-        lblTotalMeta.setText(resolved + " resolved · " + critical + " critical");
+        lblTotalMeta.setText((resolved + closed) + " settled · " + critical + " critical");
 
         lblOpenVal.setText(String.valueOf(open));
-        lblOpenMeta.setText(critical > 0 ? critical + " critical alerts open" : "Active queue backlog");
+        lblOpenMeta.setText(investigating + " investigating · " + (critical > 0 ? critical + " critical" : "0 critical"));
 
         lblMttrVal.setText(String.format("%.1fh", mttr));
         lblMttrMeta.setText(String.format("Resolution rate %.1f%%", resRate));
@@ -385,6 +470,7 @@ public class AnalyticsView extends ScrollPane {
 
         // Bind backend incidentsByDay Map<String, Long> to Canvas chart
         dayPoints.clear();
+        hoveredDayIdx = -1;
         JsonNode byDay = root.path("incidentsByDay");
         if (byDay.isObject()) {
             Iterator<Map.Entry<String, JsonNode>> fields = byDay.fields();
@@ -401,6 +487,30 @@ public class AnalyticsView extends ScrollPane {
             lblTrendRange.setText(dayPoints.size() == 1 ? first : first + " – " + last);
         }
         drawTrendChart();
+    }
+
+    private void handleTrendHover(double mx, double my) {
+        double w = trendCanvas.getWidth();
+        double h = trendCanvas.getHeight();
+        double padL = 36, padR = 16, padT = 16, padB = 28;
+        double plotW = w - padL - padR;
+        double plotH = h - padT - padB;
+        if (dayPoints.isEmpty() || plotW <= 20 || plotH <= 20
+                || mx < padL || mx > w - padR || my < padT || my > padT + plotH + 14) {
+            trendCanvas.setCursor(Cursor.DEFAULT);
+            if (hoveredDayIdx != -1) {
+                hoveredDayIdx = -1;
+                drawTrendChart();
+            }
+            return;
+        }
+        trendCanvas.setCursor(Cursor.CROSSHAIR);
+        int idx = (int) Math.floor(((mx - padL) / plotW) * dayPoints.size());
+        idx = Math.max(0, Math.min(dayPoints.size() - 1, idx));
+        if (idx != hoveredDayIdx) {
+            hoveredDayIdx = idx;
+            drawTrendChart();
+        }
     }
 
     private void drawTrendChart() {
@@ -468,16 +578,23 @@ public class AnalyticsView extends ScrollPane {
             lineX[i] = cx;
             lineY[i] = topY;
 
+            if (i == hoveredDayIdx) {
+                g.setStroke(Color.web("#CBD5E1"));
+                g.setLineWidth(1.0);
+                g.setLineDashes(3, 3);
+                g.strokeLine(cx, padT, cx, padT + plotH);
+                g.setLineDashes((double[]) null);
+            }
+
             if (barH > 0.5) {
-                g.setFill(Color.rgb(27, 152, 242, 0.22));
+                g.setFill(Color.rgb(27, 152, 242, i == hoveredDayIdx ? 0.38 : 0.20));
                 g.fillRoundRect(cx - barW / 2.0, topY, barW, barH, 5, 5);
-                g.fillRect(cx - barW / 2.0, Math.min(padT + plotH, topY + barH * 0.5), barW, Math.min(4, barH * 0.5));
             }
 
             // Show X-axis label (keep readable density if many days)
-            if (n <= 10 || i % Math.max(1, n / 7) == 0 || i == n - 1) {
+            if (n <= 10 || i % Math.max(1, n / 7) == 0 || i == n - 1 || i == hoveredDayIdx) {
                 String shortDay = dp.day().length() >= 10 ? dp.day().substring(5) : dp.day();
-                g.setFill(Color.web("#71717A"));
+                g.setFill(Color.web(i == hoveredDayIdx ? "#09090B" : "#71717A"));
                 g.setFont(Font.font(UITheme.MONO_FAMILY, 10.5));
                 g.setTextAlign(TextAlignment.CENTER);
                 g.setTextBaseline(VPos.TOP);
@@ -494,11 +611,39 @@ public class AnalyticsView extends ScrollPane {
             g.strokePolyline(lineX, lineY, n);
         }
         for (int i = 0; i < n; i++) {
+            boolean active = (i == hoveredDayIdx);
+            if (active) {
+                g.setFill(Color.rgb(27, 152, 242, 0.22));
+                g.fillOval(lineX[i] - 7, lineY[i] - 7, 14, 14);
+            }
+            double r = active ? 4.5 : 3.5;
             g.setFill(Color.WHITE);
-            g.fillOval(lineX[i] - 3.5, lineY[i] - 3.5, 7, 7);
+            g.fillOval(lineX[i] - r, lineY[i] - r, r * 2, r * 2);
             g.setStroke(Color.web("#1B98F2"));
-            g.setLineWidth(1.8);
-            g.strokeOval(lineX[i] - 3.5, lineY[i] - 3.5, 7, 7);
+            g.setLineWidth(active ? 2.2 : 1.8);
+            g.strokeOval(lineX[i] - r, lineY[i] - r, r * 2, r * 2);
+        }
+
+        // Floating tooltip on hovered day
+        if (hoveredDayIdx >= 0 && hoveredDayIdx < n) {
+            DayPoint dp = dayPoints.get(hoveredDayIdx);
+            String tip = dp.day() + " · " + dp.count() + " incident" + (dp.count() == 1 ? "" : "s");
+            Font tipFont = Font.font(UITheme.MONO_FAMILY, 11);
+            Text measure = new Text(tip);
+            measure.setFont(tipFont);
+            double boxW = measure.getLayoutBounds().getWidth() + 18;
+            double boxH = 24;
+            double bx = Math.max(padL, Math.min(w - padR - boxW, lineX[hoveredDayIdx] - boxW / 2.0));
+            double by = lineY[hoveredDayIdx] - 32;
+            if (by < 4) by = Math.min(padT + plotH - boxH - 2, lineY[hoveredDayIdx] + 10);
+
+            g.setFill(Color.web("#09090B"));
+            g.fillRoundRect(bx, by, boxW, boxH, 6, 6);
+            g.setFill(Color.WHITE);
+            g.setFont(tipFont);
+            g.setTextAlign(TextAlignment.CENTER);
+            g.setTextBaseline(VPos.CENTER);
+            g.fillText(tip, bx + boxW / 2.0, by + boxH / 2.0);
         }
     }
 
@@ -518,13 +663,13 @@ public class AnalyticsView extends ScrollPane {
         distributionList.getChildren().add(sectionSubLabel("By severity"));
         for (String key : new String[]{"CRITICAL", "HIGH", "MEDIUM", "LOW"}) {
             long c = bySev.path(key).asLong(0);
-            distributionList.getChildren().add(distRow(UITheme.severityBadge(key), c, denom));
+            distributionList.getChildren().add(distRow(UITheme.severityBadge(key), c, denom, key, null));
         }
 
         distributionList.getChildren().add(sectionSubLabel("By status"));
         for (String key : new String[]{"OPEN", "INVESTIGATING", "RESOLVED", "CLOSED"}) {
             long c = byStatus.path(key).asLong(0);
-            distributionList.getChildren().add(distRow(UITheme.statusBadge(key), c, denom));
+            distributionList.getChildren().add(distRow(UITheme.statusBadge(key), c, denom, null, key));
         }
     }
 
@@ -534,9 +679,23 @@ public class AnalyticsView extends ScrollPane {
         return l;
     }
 
-    private HBox distRow(Label badge, long count, long total) {
+    private HBox distRow(Label badge, long count, long total, String sevFilter, String statusFilter) {
         HBox r = new HBox(10);
         r.setAlignment(Pos.CENTER_LEFT);
+        r.setPadding(new Insets(3, 6, 3, 6));
+        String rowNormal = "-fx-background-color: transparent; -fx-background-radius: 6;";
+        String rowHover  = "-fx-background-color: #F4F4F5; -fx-background-radius: 6;";
+        r.setStyle(rowNormal);
+        r.setCursor(Cursor.HAND);
+        r.setOnMouseEntered(e -> r.setStyle(rowHover));
+        r.setOnMouseExited(e -> r.setStyle(rowNormal));
+        r.setOnMouseClicked(e -> {
+            if (onNavigateFilter != null) {
+                onNavigateFilter.accept(sevFilter, statusFilter);
+            }
+        });
+        Tooltip.install(r, new Tooltip("Open queue filtered by " + badge.getText()));
+
         badge.setMinWidth(102);
         badge.setAlignment(Pos.CENTER);
 

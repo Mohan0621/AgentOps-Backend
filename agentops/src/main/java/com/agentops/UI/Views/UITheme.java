@@ -2,7 +2,11 @@ package com.agentops.UI.Views;
 
 import java.util.Locale;
 
+import javafx.animation.Interpolator;
+import javafx.animation.ParallelTransition;
 import javafx.animation.ScaleTransition;
+import javafx.animation.TranslateTransition;
+import javafx.beans.binding.Bindings;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
@@ -13,6 +17,8 @@ import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -212,6 +218,15 @@ public class UITheme {
         return shadow;
     }
 
+    /** Deeper hover elevation for interactive floating cards on public showcase surfaces. */
+    public static DropShadow elevatedCardShadow() {
+        DropShadow shadow = new DropShadow();
+        shadow.setColor(Color.rgb(0, 0, 0, 0.12));
+        shadow.setRadius(28);
+        shadow.setOffsetY(10);
+        return shadow;
+    }
+
     // ── Workspace Buttons (8px Operate geometry) ─────────────────
 
     public static Button wsPrimaryBtn(String text, Node icon) {
@@ -360,6 +375,38 @@ public class UITheme {
         return svgStrokeIcon("M12 3l7 3v5c0 5-3.2 8.7-7 10-3.8-1.3-7-5-7-10V6z M9.5 12.2l2 2 3.5-4", size, c, 1.75);
     }
 
+    public static StackPane copyIcon(double size, Color c) {
+        return svgStrokeIcon("M9 9h11v11H9z M5 15H4V4h11v1", size, c, 1.75);
+    }
+
+    public static StackPane downloadIcon(double size, Color c) {
+        return svgStrokeIcon("M12 4v11 M7 11l5 5 5-5 M5 20h14", size, c, 1.75);
+    }
+
+    public static StackPane editIcon(double size, Color c) {
+        return svgStrokeIcon("M14 4l6 6L9 21H3v-6z M12 6l6 6", size, c, 1.75);
+    }
+
+    public static StackPane trashIcon(double size, Color c) {
+        return svgStrokeIcon("M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6", size, c, 1.75);
+    }
+
+    public static StackPane eyeIcon(double size, Color c) {
+        return svgStrokeIcon("M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", size, c, 1.75);
+    }
+
+    public static StackPane eyeOffIcon(double size, Color c) {
+        return svgStrokeIcon("M3 3l18 18 M10.6 10.6a2.5 2.5 0 0 0 2.8 2.8 M9.9 5.1A9.8 9.8 0 0 1 12 5c6.2 0 10 7 10 7a16.8 16.8 0 0 1-3.3 4.3 M6.6 6.6A17.1 17.1 0 0 0 2 12s3.8 7 10 7a9.7 9.7 0 0 0 4.4-1", size, c, 1.75);
+    }
+
+    public static StackPane searchIcon(double size, Color c) {
+        return svgStrokeIcon("M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z M21 21l-4.3-4.3", size, c, 1.75);
+    }
+
+    public static StackPane messageSquareIcon(double size, Color c) {
+        return svgStrokeIcon("M4 5h16v11H8l-4 4z", size, c, 1.75);
+    }
+
     public static SVGPath chevronRightIcon(Color color, double scale) {
         SVGPath p = new SVGPath();
         p.setContent("M7.64 15.63C7.98 16.01 8.57 16.04 8.96 15.70C10.33 14.46 11.42 13.48 12.16 12.65C12.88 11.84 13.44 10.99 13.44 10.00C13.44 9.01 12.88 8.16 12.16 7.35C11.42 6.52 10.33 5.54 8.96 4.30C8.58 3.96 7.98 3.99 7.64 4.37C7.29 4.76 7.32 5.35 7.71 5.70C9.11 6.96 10.11 7.86 10.76 8.59C11.42 9.34 11.56 9.74 11.56 10.00C11.56 10.26 11.42 10.66 10.76 11.41C10.11 12.14 9.11 13.04 7.70 14.30C7.32 14.65 7.29 15.24 7.64 15.63Z");
@@ -483,17 +530,51 @@ public class UITheme {
     }
 
     public static void addPillHover(Button btn) {
+        final Interpolator ease = Interpolator.SPLINE(0.16, 1.0, 0.3, 1.0);
         btn.setOnMouseEntered(e -> {
-            ScaleTransition st = new ScaleTransition(Duration.millis(140), btn);
-            st.setToX(1.02);
-            st.setToY(1.02);
-            st.play();
+            Object prev = btn.getProperties().get("pillAnim");
+            if (prev instanceof javafx.animation.Animation a) a.stop();
+
+            ScaleTransition st = new ScaleTransition(Duration.millis(150), btn);
+            st.setToX(1.028);
+            st.setToY(1.028);
+            st.setInterpolator(ease);
+
+            ParallelTransition pt = new ParallelTransition(st);
+            Node graphic = btn.getGraphic();
+            if (graphic != null) {
+                TranslateTransition gt = new TranslateTransition(Duration.millis(150), graphic);
+                gt.setInterpolator(ease);
+                if (btn.getStyleClass().contains("serko-btn-white")) {
+                    gt.setToY(1.8);
+                } else {
+                    gt.setToX(2.6);
+                }
+                pt.getChildren().add(gt);
+            }
+            btn.getProperties().put("pillAnim", pt);
+            pt.play();
         });
         btn.setOnMouseExited(e -> {
-            ScaleTransition st = new ScaleTransition(Duration.millis(140), btn);
+            Object prev = btn.getProperties().get("pillAnim");
+            if (prev instanceof javafx.animation.Animation a) a.stop();
+
+            ScaleTransition st = new ScaleTransition(Duration.millis(130), btn);
             st.setToX(1.0);
             st.setToY(1.0);
-            st.play();
+            st.setInterpolator(ease);
+
+            ParallelTransition pt = new ParallelTransition(st);
+            Node graphic = btn.getGraphic();
+            if (graphic != null) {
+                TranslateTransition gt = new TranslateTransition(Duration.millis(130), graphic);
+                gt.setInterpolator(ease);
+                gt.setToX(0);
+                gt.setToY(0);
+                pt.getChildren().add(gt);
+            }
+            btn.getProperties().put("pillAnim", pt);
+            pt.play();
         });
     }
 
@@ -507,10 +588,34 @@ public class UITheme {
         return line;
     }
 
+    /** Responsive Serko dotted trajectory divider that shrinks cleanly below maxWidth. */
+    public static Region responsiveDottedDivider(double maxWidth) {
+        Pane holder = new Pane();
+        holder.setMinWidth(0);
+        holder.setPrefWidth(maxWidth);
+        holder.setMaxWidth(maxWidth);
+        holder.setMinHeight(2);
+        holder.setPrefHeight(2);
+        holder.setMaxHeight(2);
+
+        Line line = new Line(1.0, 1.0, 1.0, 1.0);
+        line.setManaged(false);
+        line.endXProperty().bind(Bindings.max(1.0, holder.widthProperty().subtract(1.0)));
+        line.setStroke(Color.rgb(0, 0, 0, 0.25));
+        line.setStrokeWidth(1.6);
+        line.setStrokeLineCap(StrokeLineCap.ROUND);
+        line.getStrokeDashArray().addAll(1.0, 10.0);
+
+        holder.getChildren().add(line);
+        return holder;
+    }
+
     // ── Semantic Tags (4px Operate geometry, zero 999 pills in workspace) ──
 
     public static Label positiveBadge(String text) {
         Label badge = new Label(text);
+        badge.setMnemonicParsing(false);
+        badge.setMinWidth(Region.USE_PREF_SIZE);
         badge.setStyle(
             "-fx-background-color: " + POS_BG + ";" +
             "-fx-text-fill: " + POS_INK + ";" +
@@ -527,6 +632,8 @@ public class UITheme {
 
     public static Label neutralTag(String text) {
         Label tag = new Label(text);
+        tag.setMnemonicParsing(false);
+        tag.setMinWidth(Region.USE_PREF_SIZE);
         tag.setStyle(
             "-fx-background-color: #F4F4F5;" +
             "-fx-text-fill: #3F3F46;" +
@@ -544,6 +651,8 @@ public class UITheme {
     public static Label severityBadge(String severity) {
         String raw = severity != null ? severity : "UNKNOWN";
         Label badge = new Label(capitalizeWord(raw));
+        badge.setMnemonicParsing(false);
+        badge.setMinWidth(Region.USE_PREF_SIZE);
         String bg, fg, br;
         switch (raw.toUpperCase(Locale.ROOT)) {
             case "CRITICAL" -> { bg = "#FEF2F2"; fg = "#991B1B"; br = "#FECACA"; }
@@ -569,6 +678,8 @@ public class UITheme {
     public static Label statusBadge(String status) {
         String raw = status != null ? status : "UNKNOWN";
         Label badge = new Label(capitalizeWord(raw));
+        badge.setMnemonicParsing(false);
+        badge.setMinWidth(Region.USE_PREF_SIZE);
         String bg, fg, br;
         switch (raw.toUpperCase(Locale.ROOT)) {
             case "OPEN"          -> { bg = "#FEF2F2"; fg = "#991B1B"; br = "#FECACA"; }

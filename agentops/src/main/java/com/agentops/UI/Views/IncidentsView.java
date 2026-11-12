@@ -1,9 +1,17 @@
 package com.agentops.UI.Views;
 
+import java.io.File;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Consumer;
 
 import com.agentops.UI.ApiClient;
 import com.agentops.UI.Models.IncidentRow;
@@ -30,7 +38,11 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -38,26 +50,40 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.stage.FileChooser;
 import javafx.util.Duration;
 
 /**
- * Inside Workspace: Incident Queue + Structured AI Investigation Workbench.
+ * Inside Workspace: Incident Queue + Structured AI & Collaborative Investigation Workbench.
  * Operate density (#FAFAFA canvas, #FFFFFF panes, #EAEAEA hairline dividers, tabular mono IDs).
  */
 public class IncidentsView extends BorderPane {
+
+    private static final int PAGE_SIZE = 25;
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final ObservableList<IncidentRow> incidentList = FXCollections.observableArrayList();
     private final FilteredList<IncidentRow> filteredList = new FilteredList<>(incidentList, p -> true);
     private final TableView<IncidentRow> incidentTable = new TableView<>();
 
+    private Consumer<String> onNotifyToast;
+    private Runnable onDataChanged;
+
+    // Filter & scope controls
+    private Button btnScopeAll, btnScopeMine;
+    private boolean scopeOnlyMine = false;
+    private int currentPage = 0;
+    private int totalPages = 1;
     private TextField txtSearch;
     private ComboBox<String> cmbSevFilter;
     private ComboBox<String> cmbStatFilter;
 
+    // Header & pagination labels
     private Label lblQueueMeta;
     private Label lblOpenChip;
     private Label lblCriticalChip;
+    private Label lblPageInfo;
+    private Button btnPrevPage, btnNextPage;
     private Label lblSelectedId;
     private Label statusBarLbl;
     private Circle statusDot;
@@ -75,6 +101,48 @@ public class IncidentsView extends BorderPane {
 
     public IncidentsView() {
         setupUI();
+    }
+
+    public void setOnNotifyToast(Consumer<String> onNotifyToast) {
+        this.onNotifyToast = onNotifyToast;
+    }
+
+    public void setOnDataChanged(Runnable onDataChanged) {
+        this.onDataChanged = onDataChanged;
+    }
+
+    public ObservableList<IncidentRow> getLoadedIncidents() {
+        return incidentList;
+    }
+
+    public void filterBy(String severity, String status) {
+        cmbSevFilter.setValue(severity != null && !severity.isBlank() ? severity : "All severities");
+        cmbStatFilter.setValue(status != null && !status.isBlank() ? status : "All statuses");
+        txtSearch.clear();
+        applyFilters();
+    }
+
+    public void selectIncidentById(String incidentId) {
+        if (incidentId == null || incidentId.isBlank()) return;
+        txtSearch.clear();
+        cmbSevFilter.setValue("All severities");
+        cmbStatFilter.setValue("All statuses");
+        applyFilters();
+        for (IncidentRow r : incidentList) {
+            if (incidentId.equals(r.id.get())) {
+                incidentTable.getSelectionModel().select(r);
+                incidentTable.scrollTo(r);
+                break;
+            }
+        }
+    }
+
+    public void runQuickDiagnosisOnSelected() {
+        triggerAiDiagnosis();
+    }
+
+    public void runMultiAgentOnSelected() {
+        triggerMultiAgentInvestigation();
     }
 
     private void setupUI() {
@@ -119,7 +187,7 @@ public class IncidentsView extends BorderPane {
 
         bar.getChildren().addAll(titleBox, spacer, btnRefresh, btnToolbarQuickAi, btnToolbarMultiAgent);
 
-        // Single clean white hairline filter strip
+        // Clean white hairline filter strip with All | Mine scope toggle
         HBox filterBar = new HBox(8);
         filterBar.setAlignment(Pos.CENTER_LEFT);
         filterBar.setPadding(new Insets(8, 12, 8, 12));
@@ -130,6 +198,18 @@ public class IncidentsView extends BorderPane {
             "-fx-border-radius: 10;" +
             "-fx-border-width: 1;"
         );
+
+        HBox scopeTrack = new HBox(3);
+        scopeTrack.setPadding(new Insets(3));
+        scopeTrack.setStyle("-fx-background-color: #F4F4F5; -fx-background-radius: 7;");
+        btnScopeAll  = new Button("All");
+        btnScopeMine = new Button("Mine");
+        btnScopeAll.setCursor(Cursor.HAND);
+        btnScopeMine.setCursor(Cursor.HAND);
+        btnScopeAll.setOnAction(e -> setScopeOnlyMine(false));
+        btnScopeMine.setOnAction(e -> setScopeOnlyMine(true));
+        styleScopeTrack();
+        scopeTrack.getChildren().addAll(btnScopeAll, btnScopeMine);
 
         txtSearch = new TextField();
         txtSearch.setPromptText("Filter by #ID, title, category, or error log...");
@@ -143,13 +223,13 @@ public class IncidentsView extends BorderPane {
         cmbSevFilter = new ComboBox<>();
         cmbSevFilter.getItems().addAll("All severities", "CRITICAL", "HIGH", "MEDIUM", "LOW");
         cmbSevFilter.setValue("All severities");
-        cmbSevFilter.setPrefWidth(148);
+        cmbSevFilter.setPrefWidth(136);
         cmbSevFilter.valueProperty().addListener((obs, o, n) -> applyFilters());
 
         cmbStatFilter = new ComboBox<>();
         cmbStatFilter.getItems().addAll("All statuses", "OPEN", "INVESTIGATING", "RESOLVED", "CLOSED");
         cmbStatFilter.setValue("All statuses");
-        cmbStatFilter.setPrefWidth(150);
+        cmbStatFilter.setPrefWidth(138);
         cmbStatFilter.valueProperty().addListener((obs, o, n) -> applyFilters());
 
         Button btnResetFilter = new Button("Reset");
@@ -160,9 +240,24 @@ public class IncidentsView extends BorderPane {
             cmbStatFilter.setValue("All statuses");
         });
 
-        filterBar.getChildren().addAll(txtSearch, cmbSevFilter, cmbStatFilter, btnResetFilter);
+        filterBar.getChildren().addAll(scopeTrack, txtSearch, cmbSevFilter, cmbStatFilter, btnResetFilter);
         wrap.getChildren().addAll(bar, filterBar);
         return wrap;
+    }
+
+    private void setScopeOnlyMine(boolean onlyMine) {
+        if (this.scopeOnlyMine == onlyMine) return;
+        this.scopeOnlyMine = onlyMine;
+        this.currentPage = 0;
+        styleScopeTrack();
+        refreshIncidents();
+    }
+
+    private void styleScopeTrack() {
+        String active = "-fx-background-color: #FFFFFF; -fx-text-fill: #09090B; -fx-border-color: #E4E4E7; -fx-border-width: 1; -fx-border-radius: 5; -fx-background-radius: 5; -fx-font-size: 11.5px; -fx-font-weight: 500; -fx-padding: 4 10;";
+        String idle   = "-fx-background-color: transparent; -fx-text-fill: #71717A; -fx-border-color: transparent; -fx-border-width: 1; -fx-background-radius: 5; -fx-font-size: 11.5px; -fx-font-weight: 400; -fx-padding: 4 10;";
+        btnScopeAll.setStyle(!scopeOnlyMine ? active : idle);
+        btnScopeMine.setStyle(scopeOnlyMine ? active : idle);
     }
 
     // ── Split Pane: Table Left, Workbench Right ───────────────────
@@ -222,7 +317,7 @@ public class IncidentsView extends BorderPane {
         emptyBox.setPadding(new Insets(36));
         Label emptyTitle = new Label("No incidents in queue");
         emptyTitle.setStyle("-fx-text-fill: #18181B; -fx-font-size: 13.5px; -fx-font-weight: 500;");
-        Label emptyHint = new Label("Adjust your filters, refresh the queue, or report a new stack trace.");
+        Label emptyHint = new Label("Adjust your filters, switch All / Mine, or report a new stack trace.");
         emptyHint.setStyle("-fx-text-fill: #71717A; -fx-font-size: 12.5px;");
         Button btnEmptyRefresh = UITheme.wsSecondaryBtn("Refresh queue", UITheme.refreshIcon(13, Color.web("#52525B")));
         btnEmptyRefresh.setOnAction(e -> refreshIncidents());
@@ -237,14 +332,47 @@ public class IncidentsView extends BorderPane {
             }
         });
 
-        card.getChildren().addAll(header, incidentTable);
+        // Pagination footer
+        HBox pagerBar = new HBox(8);
+        pagerBar.setAlignment(Pos.CENTER_LEFT);
+        pagerBar.setPadding(new Insets(8, 14, 8, 14));
+        pagerBar.setStyle(
+            "-fx-background-color: #FFFFFF; -fx-background-radius: 0 0 12 12;" +
+            "-fx-border-color: " + UITheme.WS_BORDER + " transparent transparent transparent; -fx-border-width: 1 0 0 0;"
+        );
+        lblPageInfo = new Label("Page 1 of 1");
+        lblPageInfo.setStyle(UITheme.monoStyle(11.5, UITheme.INK_MUTED));
+        Region pSp = new Region();
+        HBox.setHgrow(pSp, Priority.ALWAYS);
+        btnPrevPage = new Button("< Prev");
+        btnPrevPage.getStyleClass().add("ws-btn-ghost");
+        btnPrevPage.setDisable(true);
+        btnPrevPage.setOnAction(e -> {
+            if (currentPage > 0) {
+                currentPage--;
+                refreshIncidents();
+            }
+        });
+        btnNextPage = new Button("Next >");
+        btnNextPage.getStyleClass().add("ws-btn-ghost");
+        btnNextPage.setDisable(true);
+        btnNextPage.setOnAction(e -> {
+            if (currentPage < totalPages - 1) {
+                currentPage++;
+                refreshIncidents();
+            }
+        });
+        pagerBar.getChildren().addAll(lblPageInfo, pSp, btnPrevPage, btnNextPage);
+
+        card.getChildren().addAll(header, incidentTable, pagerBar);
         return card;
     }
 
     @SuppressWarnings("unchecked")
     private void buildTableColumns() {
         TableColumn<IncidentRow, String> colId = col("ID", 58);
-        colId.setMaxWidth(72);
+        colId.setMinWidth(56);
+        colId.setMaxWidth(70);
         colId.setCellValueFactory(c -> c.getValue().id);
         colId.setCellFactory(tc -> new TableCell<>() {
             @Override protected void updateItem(String item, boolean empty) {
@@ -254,7 +382,8 @@ public class IncidentsView extends BorderPane {
             }
         });
 
-        TableColumn<IncidentRow, String> colTitle = col("Title", 240);
+        TableColumn<IncidentRow, String> colTitle = col("Title", 172);
+        colTitle.setMinWidth(106);
         colTitle.setCellValueFactory(c -> c.getValue().title);
         colTitle.setCellFactory(tc -> new TableCell<>() {
             @Override protected void updateItem(String item, boolean empty) {
@@ -264,7 +393,9 @@ public class IncidentsView extends BorderPane {
             }
         });
 
-        TableColumn<IncidentRow, String> colType = col("Category", 130);
+        TableColumn<IncidentRow, String> colType = col("Category", 122);
+        colType.setMinWidth(112);
+        colType.setMaxWidth(145);
         colType.setCellValueFactory(c -> c.getValue().type);
         colType.setCellFactory(tc -> new TableCell<>() {
             @Override protected void updateItem(String item, boolean empty) {
@@ -277,8 +408,9 @@ public class IncidentsView extends BorderPane {
             }
         });
 
-        TableColumn<IncidentRow, String> colSev = col("Severity", 104);
-        colSev.setMaxWidth(120);
+        TableColumn<IncidentRow, String> colSev = col("Severity", 88);
+        colSev.setMinWidth(86);
+        colSev.setMaxWidth(100);
         colSev.setCellValueFactory(c -> c.getValue().severity);
         colSev.setCellFactory(tc -> new TableCell<>() {
             @Override protected void updateItem(String item, boolean empty) {
@@ -288,8 +420,9 @@ public class IncidentsView extends BorderPane {
             }
         });
 
-        TableColumn<IncidentRow, String> colStatus = col("Status", 122);
-        colStatus.setMaxWidth(140);
+        TableColumn<IncidentRow, String> colStatus = col("Status", 114);
+        colStatus.setMinWidth(112);
+        colStatus.setMaxWidth(128);
         colStatus.setCellValueFactory(c -> c.getValue().status);
         colStatus.setCellFactory(tc -> new TableCell<>() {
             @Override protected void updateItem(String item, boolean empty) {
@@ -300,13 +433,22 @@ public class IncidentsView extends BorderPane {
         });
 
         incidentTable.getColumns().addAll(colId, colTitle, colType, colSev, colStatus);
+        incidentTable.widthProperty().addListener((obs, oldW, newW) -> {
+            double w = newW.doubleValue();
+            if (w > 10) {
+                boolean showCat = w >= 480;
+                if (colType.isVisible() != showCat) {
+                    colType.setVisible(showCat);
+                }
+            }
+        });
     }
 
     // ── Right Investigation Workbench ─────────────────────────────
     private VBox buildWorkbenchCard() {
         VBox card = new VBox(0);
-        card.setPrefWidth(465);
-        card.setMinWidth(400);
+        card.setPrefWidth(442);
+        card.setMinWidth(356);
         card.setStyle(UITheme.cardStyle());
 
         HBox header = new HBox(8);
@@ -358,10 +500,10 @@ public class IncidentsView extends BorderPane {
         subTrack.getChildren().addAll(subTabDetails, subTabAi, subTabHistory);
         subTabBarWrap.getChildren().add(subTrack);
 
-        detailsPane = new VBox(14);
+        detailsPane = new VBox(12);
         detailsPane.setPadding(new Insets(16));
 
-        aiPane = new VBox(14);
+        aiPane = new VBox(12);
         aiPane.setPadding(new Insets(16));
 
         historyPane = new VBox(12);
@@ -454,7 +596,8 @@ public class IncidentsView extends BorderPane {
                 || safeLower(row.title.get()).contains(q)
                 || safeLower(row.type.get()).contains(q)
                 || safeLower(row.description.get()).contains(q)
-                || safeLower(row.errorLogs.get()).contains(q);
+                || safeLower(row.errorLogs.get()).contains(q)
+                || safeLower(row.createdByEmail.get()).contains(q);
 
             boolean matchesSev = sev == null || "All severities".equals(sev)
                 || sev.equalsIgnoreCase(row.severity.get());
@@ -484,6 +627,9 @@ public class IncidentsView extends BorderPane {
     }
 
     private void renderEmptySelection() {
+        btnMarkInvestigating.setDisable(true);
+        btnMarkResolved.setDisable(true);
+        lblSelectedId.setText("");
         detailsPane.getChildren().setAll(infoCard(
             "No incident selected",
             "Select an incident from the queue on the left to inspect error logs, run Quick diagnosis, or start the 6-agent investigation.",
@@ -501,28 +647,104 @@ public class IncidentsView extends BorderPane {
         ));
     }
 
+    // ── Details & Logs Tab (Metadata + Inline Edit + Delete + Copy Logs) ──
     private void renderDetailsPane(IncidentRow row) {
         detailsPane.getChildren().clear();
 
-        HBox metaRow = new HBox(6);
-        metaRow.setAlignment(Pos.CENTER_LEFT);
+        HBox metaRow = new HBox(8);
+        metaRow.setAlignment(Pos.TOP_LEFT);
+
         Label idBadge = new Label("#" + row.id.get());
+        idBadge.setMinWidth(Region.USE_PREF_SIZE);
         idBadge.setStyle(
             "-fx-background-color: #09090B; -fx-text-fill: #FFFFFF; -fx-font-family: '" + UITheme.MONO_FAMILY + "', 'Consolas', monospace;" +
             "-fx-font-size: 11px; -fx-font-weight: 500; -fx-padding: 2 7; -fx-background-radius: 4;"
         );
+        Label sevBadge = UITheme.severityBadge(row.severity.get());
+        sevBadge.setMinWidth(Region.USE_PREF_SIZE);
+        Label statBadge = UITheme.statusBadge(row.status.get());
+        statBadge.setMinWidth(Region.USE_PREF_SIZE);
         Label typeBadge = UITheme.neutralTag(UITheme.capitalizeWord(row.type.get()));
-        metaRow.getChildren().addAll(idBadge, UITheme.severityBadge(row.severity.get()), UITheme.statusBadge(row.status.get()), typeBadge);
+        typeBadge.setMinWidth(Region.USE_PREF_SIZE);
+
+        FlowPane tagsFlow = new FlowPane(6, 5);
+        tagsFlow.setAlignment(Pos.CENTER_LEFT);
+        tagsFlow.getChildren().addAll(idBadge, sevBadge, statBadge, typeBadge);
+        HBox.setHgrow(tagsFlow, Priority.ALWAYS);
+
+        Button btnEdit = miniIconBtn("Edit", UITheme.editIcon(12, Color.web("#52525B")));
+        btnEdit.setMinWidth(Region.USE_PREF_SIZE);
+        Button btnDelete = miniIconBtn("Delete", UITheme.trashIcon(12, Color.web("#DC2626")));
+        btnDelete.setMinWidth(Region.USE_PREF_SIZE);
+        String currentUser = ApiClient.getCurrentUserEmail();
+        boolean canEdit = row.createdByEmail.get().isBlank() || currentUser == null
+            || currentUser.equalsIgnoreCase(row.createdByEmail.get())
+            || currentUser.equalsIgnoreCase(row.assignedToEmail.get());
+        boolean canDelete = row.createdByEmail.get().isBlank() || currentUser == null
+            || currentUser.equalsIgnoreCase(row.createdByEmail.get());
+        if (!canEdit) {
+            btnEdit.setDisable(true);
+            btnEdit.setTooltip(new Tooltip("Only creator or assignee can edit this incident"));
+        }
+        if (!canDelete) {
+            btnDelete.setDisable(true);
+            btnDelete.setTooltip(new Tooltip("Only the incident creator can delete this incident"));
+        }
+
+        HBox actionBtns = new HBox(6, btnEdit, btnDelete);
+        actionBtns.setAlignment(Pos.CENTER_RIGHT);
+        actionBtns.setMinWidth(Region.USE_PREF_SIZE);
+
+        metaRow.getChildren().addAll(tagsFlow, actionBtns);
+
+        // Inline delete confirm strip (hidden until Delete clicked)
+        HBox deleteConfirmStrip = new HBox(8);
+        deleteConfirmStrip.setAlignment(Pos.CENTER_LEFT);
+        deleteConfirmStrip.setPadding(new Insets(10, 12, 10, 12));
+        deleteConfirmStrip.setStyle("-fx-background-color: #FEF2F2; -fx-border-color: #FECACA; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;");
+        deleteConfirmStrip.setVisible(false);
+        deleteConfirmStrip.setManaged(false);
+        Label delPrompt = new Label("Delete #" + row.id.get() + " permanently?");
+        delPrompt.setStyle("-fx-font-size: 12px; -fx-font-weight: 500; -fx-text-fill: #991B1B;");
+        Region dSp = new Region(); HBox.setHgrow(dSp, Priority.ALWAYS);
+        Button btnConfirmDel = quickActionBtn("Confirm delete", "#DC2626", "#FFFFFF", "#DC2626");
+        Button btnCancelDel  = UITheme.wsSecondaryBtn("Cancel", null);
+        btnCancelDel.setPadding(new Insets(4, 10, 4, 10));
+        deleteConfirmStrip.getChildren().addAll(delPrompt, dSp, btnCancelDel, btnConfirmDel);
+
+        btnDelete.setOnAction(e -> {
+            boolean show = !deleteConfirmStrip.isVisible();
+            deleteConfirmStrip.setVisible(show);
+            deleteConfirmStrip.setManaged(show);
+        });
+        btnCancelDel.setOnAction(e -> {
+            deleteConfirmStrip.setVisible(false);
+            deleteConfirmStrip.setManaged(false);
+        });
+        btnConfirmDel.setOnAction(e -> deleteSelectedIncident(row, btnConfirmDel));
 
         Label titleLbl = new Label(row.title.get());
+        titleLbl.setMnemonicParsing(false);
         titleLbl.setWrapText(true);
         titleLbl.setStyle("-fx-font-size: 16px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
+
+        // Metadata ownership / timeline bar
+        FlowPane ownershipBar = new FlowPane(12, 4);
+        ownershipBar.setPadding(new Insets(8, 12, 8, 12));
+        ownershipBar.setStyle(UITheme.softCardStyle());
+        ownershipBar.getChildren().addAll(
+            metaChip("Reporter", row.createdByEmail.get().isBlank() ? "—" : row.createdByEmail.get()),
+            metaChip("Assignee", row.assignedToEmail.get().isBlank() ? "Unassigned" : row.assignedToEmail.get()),
+            metaChip("Created", formatIso(row.createdAt.get())),
+            metaChip("Updated", formatIso(row.updatedAt.get()))
+        );
 
         VBox descCard = new VBox(5);
         descCard.setPadding(new Insets(12));
         descCard.setStyle(UITheme.softCardStyle());
         Label dLbl = UITheme.wsSectionLabel("Description");
         Label dTxt = new Label(row.description.get().isBlank() ? "No description provided." : row.description.get());
+        dTxt.setMnemonicParsing(false);
         dTxt.setWrapText(true);
         dTxt.setStyle("-fx-font-size: 13px; -fx-text-fill: #27272A; -fx-line-spacing: 3px;");
         descCard.getChildren().addAll(dLbl, dTxt);
@@ -530,13 +752,33 @@ public class IncidentsView extends BorderPane {
         VBox logsCard = new VBox(6);
         logsCard.setPadding(new Insets(12));
         logsCard.setStyle(UITheme.softCardStyle());
-        Label lLbl = UITheme.wsSectionLabel("Error logs / stack trace");
+        HBox logsHead = new HBox(8, UITheme.wsSectionLabel("Error logs / stack trace"), new Region());
+        logsHead.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(logsHead.getChildren().get(1), Priority.ALWAYS);
+        Button btnCopyLogs = miniIconBtn("Copy logs", UITheme.copyIcon(12, Color.web("#52525B")));
+        btnCopyLogs.setOnAction(e -> copyToClipboard(row.errorLogs.get(), "Copied error logs to clipboard"));
+        logsHead.getChildren().add(btnCopyLogs);
+
         TextArea ta = new TextArea(row.errorLogs.get().isBlank() ? "(no error logs attached)" : row.errorLogs.get());
         ta.setEditable(false);
         ta.setWrapText(true);
-        ta.setPrefRowCount(9);
+        ta.setPrefRowCount(8);
         ta.setStyle(UITheme.monoStyle(11.5, "#18181B"));
-        logsCard.getChildren().addAll(lLbl, ta);
+        logsCard.getChildren().addAll(logsHead, ta);
+
+        // Inline Edit Form (hidden until Edit clicked)
+        VBox editBox = buildInlineEditCard(row);
+        editBox.setVisible(false);
+        editBox.setManaged(false);
+        btnEdit.setOnAction(e -> {
+            boolean editing = !editBox.isVisible();
+            editBox.setVisible(editing);
+            editBox.setManaged(editing);
+            descCard.setVisible(!editing);
+            descCard.setManaged(!editing);
+            logsCard.setVisible(!editing);
+            logsCard.setManaged(!editing);
+        });
 
         HBox actionRow = new HBox(10);
         Button btnQ = UITheme.wsPrimaryBtn("Quick diagnosis", UITheme.boltIcon(13, Color.WHITE));
@@ -546,7 +788,130 @@ public class IncidentsView extends BorderPane {
         btnM.setOnAction(e -> triggerMultiAgentInvestigation());
         actionRow.getChildren().addAll(btnQ, btnM);
 
-        detailsPane.getChildren().addAll(metaRow, titleLbl, descCard, logsCard, actionRow);
+        detailsPane.getChildren().addAll(metaRow, deleteConfirmStrip, titleLbl, ownershipBar, editBox, descCard, logsCard, actionRow);
+    }
+
+    private VBox buildInlineEditCard(IncidentRow row) {
+        VBox box = new VBox(10);
+        box.setPadding(new Insets(12));
+        box.setStyle("-fx-background-color: #FFFFFF; -fx-border-color: #DBEAFE; -fx-border-width: 1; -fx-border-radius: 10; -fx-background-radius: 10;");
+
+        TextField tfTitle = new TextField(row.title.get());
+        TextField tfType  = new TextField(row.type.get());
+        ComboBox<String> cbSev = new ComboBox<>();
+        cbSev.getItems().addAll("LOW", "MEDIUM", "HIGH", "CRITICAL");
+        cbSev.setValue(row.severity.get().isBlank() ? "MEDIUM" : row.severity.get());
+        cbSev.setMaxWidth(Double.MAX_VALUE);
+
+        ComboBox<String> cbStat = new ComboBox<>();
+        cbStat.getItems().addAll("OPEN", "INVESTIGATING", "RESOLVED", "CLOSED");
+        cbStat.setValue(row.status.get().isBlank() ? "OPEN" : row.status.get());
+        cbStat.setMaxWidth(Double.MAX_VALUE);
+
+        HBox rowFields = new HBox(8,
+            UITheme.formField("Severity", cbSev),
+            UITheme.formField("Status", cbStat),
+            UITheme.formField("Category", tfType)
+        );
+        for (var n : rowFields.getChildren()) HBox.setHgrow(n, Priority.ALWAYS);
+
+        TextArea taDesc = new TextArea(row.description.get());
+        taDesc.setPrefRowCount(3);
+        taDesc.setWrapText(true);
+
+        TextArea taLogs = new TextArea(row.errorLogs.get());
+        taLogs.setPrefRowCount(5);
+        taLogs.setWrapText(true);
+        taLogs.setStyle(UITheme.monoStyle(11.5, "#18181B"));
+
+        Button btnSave = UITheme.wsPrimaryBtn("Save changes", null);
+        Button btnCancel = UITheme.wsSecondaryBtn("Cancel", null);
+        btnCancel.setOnAction(e -> renderDetailsPane(row));
+
+        btnSave.setOnAction(e -> {
+            btnSave.setDisable(true);
+            btnSave.setText("Saving...");
+            String newTitle = tfTitle.getText().trim();
+            String newDesc  = taDesc.getText().trim();
+            String newLogs  = taLogs.getText().trim();
+            String newSev   = cbSev.getValue();
+            String newStat  = cbStat.getValue();
+            String newType  = tfType.getText().trim();
+            setStatus("Saving edits to #" + row.id.get() + "...", UITheme.GRAD_BLUE);
+
+            new Thread(() -> {
+                try {
+                    HttpResponse<String> res = ApiClient.updateIncident(
+                        Long.parseLong(row.id.get()), newTitle, newDesc, newLogs, newSev, newStat, newType
+                    );
+                    if (res.statusCode() == 200) {
+                        Platform.runLater(() -> {
+                            setStatus("Saved changes to Incident #" + row.id.get(), UITheme.POS_DOT);
+                            notifyToast("Saved Incident #" + row.id.get());
+                            refreshIncidents();
+                            if (onDataChanged != null) onDataChanged.run();
+                        });
+                    } else {
+                        String err = extractServerError(res.body(), "Update failed (" + res.statusCode() + ")");
+                        Platform.runLater(() -> {
+                            btnSave.setDisable(false);
+                            btnSave.setText("Save changes");
+                            setStatus(err, UITheme.COLOR_DANGER);
+                            notifyToast(err);
+                        });
+                    }
+                } catch (Exception ex) {
+                    Platform.runLater(() -> {
+                        btnSave.setDisable(false);
+                        btnSave.setText("Save changes");
+                        setStatus("Save error: " + ex.getMessage(), UITheme.COLOR_DANGER);
+                    });
+                }
+            }).start();
+        });
+
+        HBox btns = new HBox(8, btnSave, btnCancel);
+        box.getChildren().addAll(
+            UITheme.wsSectionLabel("Edit incident"),
+            UITheme.formField("Title", tfTitle),
+            rowFields,
+            UITheme.formField("Description", taDesc),
+            UITheme.formField("Error logs", taLogs),
+            btns
+        );
+        return box;
+    }
+
+    private void deleteSelectedIncident(IncidentRow row, Button triggerBtn) {
+        triggerBtn.setDisable(true);
+        setStatus("Deleting Incident #" + row.id.get() + "...", UITheme.COLOR_WARNING);
+        new Thread(() -> {
+            try {
+                HttpResponse<String> res = ApiClient.deleteIncident(Long.parseLong(row.id.get()));
+                if (res.statusCode() == 200 || res.statusCode() == 204) {
+                    Platform.runLater(() -> {
+                        setStatus("Deleted Incident #" + row.id.get(), UITheme.POS_DOT);
+                        notifyToast("Deleted Incident #" + row.id.get());
+                        incidentTable.getSelectionModel().clearSelection();
+                        renderEmptySelection();
+                        refreshIncidents();
+                        if (onDataChanged != null) onDataChanged.run();
+                    });
+                } else {
+                    String err = extractServerError(res.body(), "Delete failed (" + res.statusCode() + ")");
+                    Platform.runLater(() -> {
+                        triggerBtn.setDisable(false);
+                        setStatus(err, UITheme.COLOR_DANGER);
+                        notifyToast(err);
+                    });
+                }
+            } catch (Exception ex) {
+                Platform.runLater(() -> {
+                    triggerBtn.setDisable(false);
+                    setStatus("Delete error: " + ex.getMessage(), UITheme.COLOR_DANGER);
+                });
+            }
+        }).start();
     }
 
     private void renderAiIdleState(IncidentRow row) {
@@ -580,9 +945,11 @@ public class IncidentsView extends BorderPane {
     // ── Data Loading ──────────────────────────────────────────────
     public void refreshIncidents() {
         setStatus("Loading incidents...", UITheme.INK_DIM);
+        final boolean onlyMine = scopeOnlyMine;
+        final int page = currentPage;
         new Thread(() -> {
             try {
-                HttpResponse<String> res = ApiClient.getIncidents();
+                HttpResponse<String> res = ApiClient.getIncidents(onlyMine, page, PAGE_SIZE);
                 if (res.statusCode() == 200) {
                     JsonNode root = mapper.readTree(res.body());
                     Platform.runLater(() -> applyIncidentsData(root));
@@ -619,14 +986,29 @@ public class IncidentsView extends BorderPane {
                 st,
                 item.path("incidentType").asText("General"),
                 item.path("description").asText(""),
-                item.path("errorLogs").asText("")
+                item.path("errorLogs").asText(""),
+                item.path("createdByEmail").asText(""),
+                item.path("assignedToEmail").asText(""),
+                item.path("createdAt").asText(""),
+                item.path("updatedAt").asText("")
             ));
         }
 
         incidentList.setAll(rows);
-        lblQueueMeta.setText(rows.size() + " incident" + (rows.size() == 1 ? "" : "s"));
+
+        int pageNum = root.path("number").asInt(0);
+        int totPages = Math.max(1, root.path("totalPages").asInt(1));
+        long totElems = root.path("totalElements").asLong(rows.size());
+        this.currentPage = pageNum;
+        this.totalPages = totPages;
+
+        lblQueueMeta.setText(totElems + " incident" + (totElems == 1 ? "" : "s"));
         lblOpenChip.setText(openCount + " open");
         lblCriticalChip.setText(critCount + " critical");
+        lblPageInfo.setText("Page " + (pageNum + 1) + " of " + totPages + " · " + totElems + " total");
+        btnPrevPage.setDisable(root.path("first").asBoolean(pageNum <= 0));
+        btnNextPage.setDisable(root.path("last").asBoolean(pageNum >= totPages - 1));
+
         setStatus("Synced " + rows.size() + " incident" + (rows.size() == 1 ? "" : "s") +
                   " · updated " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")), UITheme.POS_DOT);
 
@@ -634,12 +1016,16 @@ public class IncidentsView extends BorderPane {
             rows.stream()
                 .filter(r -> prevSelectedId.equals(r.id.get()))
                 .findFirst()
-                .ifPresent(r -> incidentTable.getSelectionModel().select(r));
+                .ifPresentOrElse(
+                    r -> incidentTable.getSelectionModel().select(r),
+                    () -> { if (!rows.isEmpty()) incidentTable.getSelectionModel().selectFirst(); }
+                );
         } else if (!rows.isEmpty() && incidentTable.getSelectionModel().getSelectedItem() == null) {
             incidentTable.getSelectionModel().selectFirst();
         }
     }
 
+    // ── Saved History + Manual Investigation + Comments ─────────────
     private void loadSavedInvestigations(IncidentRow row) {
         historyPane.getChildren().setAll(infoCard("Loading history...", "Fetching investigation records for Incident #" + row.id.get(), UITheme.BG_CANVAS));
         new Thread(() -> {
@@ -663,16 +1049,39 @@ public class IncidentsView extends BorderPane {
 
     private void renderHistoryCards(IncidentRow row, JsonNode arr) {
         historyPane.getChildren().clear();
+
+        // Top action bar + inline manual investigation composer
+        HBox histHead = new HBox(8);
+        histHead.setAlignment(Pos.CENTER_LEFT);
+        Label hTitle = new Label("Investigation timeline (" + (arr.isArray() ? arr.size() : 0) + ")");
+        hTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
+        Region hSp = new Region(); HBox.setHgrow(hSp, Priority.ALWAYS);
+        Button btnNewInv = UITheme.wsSecondaryBtn("+ Manual investigation", null);
+        btnNewInv.setPadding(new Insets(5, 11, 5, 11));
+        histHead.getChildren().addAll(hTitle, hSp, btnNewInv);
+
+        VBox composerBox = buildManualInvestigationForm(row);
+        composerBox.setVisible(false);
+        composerBox.setManaged(false);
+        btnNewInv.setOnAction(e -> {
+            boolean show = !composerBox.isVisible();
+            composerBox.setVisible(show);
+            composerBox.setManaged(show);
+        });
+
+        historyPane.getChildren().addAll(histHead, composerBox);
+
         if (!arr.isArray() || arr.isEmpty()) {
             historyPane.getChildren().add(infoCard(
                 "No saved investigations",
-                "Run the 6-agent investigation on Incident #" + row.id.get() + " to generate and persist a permanent root-cause report.",
+                "Run the 6-agent investigation or log a manual investigation above for Incident #" + row.id.get() + ".",
                 UITheme.BG_CANVAS
             ));
             return;
         }
 
         for (JsonNode inv : arr) {
+            long invId = inv.path("id").asLong(-1);
             VBox card = new VBox(8);
             card.setPadding(new Insets(12, 14, 12, 14));
             card.setStyle(UITheme.softCardStyle());
@@ -683,30 +1092,277 @@ public class IncidentsView extends BorderPane {
             Label originBadge = isAi
                 ? UITheme.positiveBadge("AI generated")
                 : UITheme.neutralTag("Manual");
-            Label progressBadge = UITheme.neutralTag(UITheme.capitalizeWord(inv.path("progress").asText("IN_PROGRESS")));
-            top.getChildren().addAll(originBadge, progressBadge);
+
+            String currentProgress = inv.path("progress").asText("STARTED");
+            ComboBox<String> cmbProg = new ComboBox<>();
+            cmbProg.getItems().addAll("STARTED", "IN_PROGRESS", "HYPOTHESIS_TESTING", "ROOT_CAUSE_FOUND", "RESOLVED");
+            if (!cmbProg.getItems().contains(currentProgress)) {
+                cmbProg.getItems().add(currentProgress);
+            }
+            cmbProg.setValue(currentProgress);
+            cmbProg.setStyle("-fx-font-size: 11px; -fx-padding: 1 6;");
+            final String[] committedProg = {currentProgress};
+            cmbProg.setOnAction(ev -> {
+                String nextProg = cmbProg.getValue();
+                if (invId < 0 || nextProg == null || nextProg.equals(committedProg[0])) return;
+                cmbProg.setDisable(true);
+                new Thread(() -> {
+                    try {
+                        HttpResponse<String> r = ApiClient.updateInvestigation(invId, nextProg, null, null, null, null);
+                        Platform.runLater(() -> {
+                            cmbProg.setDisable(false);
+                            if (r.statusCode() == 200) {
+                                committedProg[0] = nextProg;
+                                setStatus("Investigation #" + invId + " -> " + nextProg, UITheme.POS_DOT);
+                                notifyToast("Updated investigation progress");
+                            } else {
+                                cmbProg.setValue(committedProg[0]);
+                                setStatus("Progress update failed (" + r.statusCode() + ")", UITheme.COLOR_DANGER);
+                            }
+                        });
+                    } catch (Exception ex) {
+                        Platform.runLater(() -> {
+                            cmbProg.setDisable(false);
+                            cmbProg.setValue(committedProg[0]);
+                            setStatus("Progress update error: " + ex.getMessage(), UITheme.COLOR_DANGER);
+                        });
+                    }
+                }).start();
+            });
+
+            Region topSp = new Region(); HBox.setHgrow(topSp, Priority.ALWAYS);
+            Label byLbl = new Label(inv.path("investigatedByEmail").asText("") + " · " + formatIso(inv.path("createdAt").asText("")));
+            byLbl.setMnemonicParsing(false);
+            byLbl.setStyle("-fx-font-size: 11px; -fx-text-fill: #71717A;");
+
+            top.getChildren().addAll(originBadge, cmbProg, topSp, byLbl);
 
             Label t = new Label(inv.path("title").asText("Investigation #" + inv.path("id").asText()));
+            t.setMnemonicParsing(false);
             t.setWrapText(true);
             t.setStyle("-fx-font-size: 13.5px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
 
+            card.getChildren().addAll(top, t);
+
+            String hypothesis = inv.path("hypothesis").asText("");
+            String notes = inv.path("notes").asText("");
             String rootCause = inv.path("rootCauseAnalysis").asText("");
             String steps = inv.path("resolutionSteps").asText("");
+            String attachedLogs = inv.path("attachedLogs").asText("");
 
-            Label rcLbl = new Label(rootCause.isBlank() ? inv.path("hypothesis").asText("") : rootCause);
-            rcLbl.setWrapText(true);
-            rcLbl.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #3F3F46;");
-
-            card.getChildren().addAll(top, t, rcLbl);
-
+            if (!hypothesis.isBlank()) {
+                Label hLbl = new Label("Hypothesis: " + hypothesis);
+                hLbl.setMnemonicParsing(false);
+                hLbl.setWrapText(true);
+                hLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #1D4ED8;");
+                card.getChildren().add(hLbl);
+            }
+            if (!notes.isBlank()) {
+                Label nLbl = new Label(notes);
+                nLbl.setMnemonicParsing(false);
+                nLbl.setWrapText(true);
+                nLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #52525B;");
+                card.getChildren().add(nLbl);
+            }
+            if (!rootCause.isBlank()) {
+                Label rcLbl = new Label("Root cause: " + rootCause);
+                rcLbl.setMnemonicParsing(false);
+                rcLbl.setWrapText(true);
+                rcLbl.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #18181B;");
+                card.getChildren().add(rcLbl);
+            }
             if (!steps.isBlank()) {
                 Label stLbl = new Label("Resolution: " + steps);
+                stLbl.setMnemonicParsing(false);
                 stLbl.setWrapText(true);
                 stLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #166534; -fx-font-weight: 500;");
                 card.getChildren().add(stLbl);
             }
+            if (!attachedLogs.isBlank()) {
+                Button toggleLogs = miniIconBtn("Show attached logs", UITheme.terminalIcon(12, Color.web("#52525B")));
+                TextArea logPreview = new TextArea(attachedLogs);
+                logPreview.setEditable(false);
+                logPreview.setWrapText(true);
+                logPreview.setPrefRowCount(4);
+                logPreview.setStyle(UITheme.monoStyle(11, "#18181B"));
+                logPreview.setVisible(false);
+                logPreview.setManaged(false);
+                toggleLogs.setOnAction(e -> {
+                    boolean show = !logPreview.isVisible();
+                    logPreview.setVisible(show);
+                    logPreview.setManaged(show);
+                    toggleLogs.setText(show ? "Hide attached logs" : "Show attached logs");
+                });
+                card.getChildren().addAll(toggleLogs, logPreview);
+            }
+
+            // Collaboration Comments Thread + Composer
+            if (invId >= 0) {
+                card.getChildren().add(buildCommentsBlock(invId, inv.path("comments")));
+            }
+
             historyPane.getChildren().add(card);
         }
+    }
+
+    private VBox buildManualInvestigationForm(IncidentRow row) {
+        VBox form = new VBox(8);
+        form.setPadding(new Insets(12));
+        form.setStyle("-fx-background-color: #FFFFFF; -fx-border-color: #DBEAFE; -fx-border-width: 1; -fx-border-radius: 10; -fx-background-radius: 10;");
+
+        TextField tfTitle = new TextField("Manual Investigation · #" + row.id.get());
+        ComboBox<String> cbProg = new ComboBox<>();
+        cbProg.getItems().addAll("STARTED", "IN_PROGRESS", "HYPOTHESIS_TESTING", "ROOT_CAUSE_FOUND", "RESOLVED");
+        cbProg.setValue("IN_PROGRESS");
+        cbProg.setMaxWidth(Double.MAX_VALUE);
+
+        TextField tfHyp = new TextField();
+        tfHyp.setPromptText("Working hypothesis...");
+
+        TextArea taNotes = new TextArea();
+        taNotes.setPromptText("Observations, checked pods, DB metrics...");
+        taNotes.setPrefRowCount(2);
+        taNotes.setWrapText(true);
+
+        TextField tfRc = new TextField();
+        tfRc.setPromptText("Confirmed root cause (optional)");
+
+        Button btnSave = UITheme.wsPrimaryBtn("Create investigation", null);
+        btnSave.setOnAction(e -> {
+            if (tfTitle.getText().isBlank()) return;
+            btnSave.setDisable(true);
+            btnSave.setText("Saving...");
+            new Thread(() -> {
+                try {
+                    HttpResponse<String> r = ApiClient.createInvestigation(
+                        Long.parseLong(row.id.get()),
+                        tfTitle.getText().trim(),
+                        tfHyp.getText().trim(),
+                        taNotes.getText().trim(),
+                        "",
+                        tfRc.getText().trim(),
+                        "",
+                        cbProg.getValue()
+                    );
+                    Platform.runLater(() -> {
+                        btnSave.setDisable(false);
+                        btnSave.setText("Create investigation");
+                        if (r.statusCode() == 201 || r.statusCode() == 200) {
+                            notifyToast("Manual investigation added");
+                            refreshIncidents();
+                            loadSavedInvestigations(row);
+                            if (onDataChanged != null) onDataChanged.run();
+                        } else {
+                            setStatus("Failed to save investigation (" + r.statusCode() + ")", UITheme.COLOR_DANGER);
+                        }
+                    });
+                } catch (Exception ex) {
+                    Platform.runLater(() -> {
+                        btnSave.setDisable(false);
+                        btnSave.setText("Create investigation");
+                        setStatus("Error: " + ex.getMessage(), UITheme.COLOR_DANGER);
+                    });
+                }
+            }).start();
+        });
+
+        form.getChildren().addAll(
+            UITheme.wsSectionLabel("Log manual investigation"),
+            UITheme.formField("Title", tfTitle),
+            UITheme.formField("Progress stage", cbProg),
+            UITheme.formField("Hypothesis", tfHyp),
+            UITheme.formField("Investigation notes", taNotes),
+            UITheme.formField("Root cause summary", tfRc),
+            btnSave
+        );
+        return form;
+    }
+
+    private VBox buildCommentsBlock(long invId, JsonNode commentsNode) {
+        VBox wrap = new VBox(6);
+        wrap.setPadding(new Insets(8, 0, 0, 0));
+        wrap.setStyle("-fx-border-color: " + UITheme.WS_BORDER + " transparent transparent transparent; -fx-border-width: 1 0 0 0;");
+
+        int count = commentsNode.isArray() ? commentsNode.size() : 0;
+        HBox cHead = new HBox(6, UITheme.messageSquareIcon(13, Color.web("#71717A")), new Label("Team comments (" + count + ")"));
+        cHead.setAlignment(Pos.CENTER_LEFT);
+        ((Label) cHead.getChildren().get(1)).setStyle("-fx-font-size: 11.5px; -fx-font-weight: 500; -fx-text-fill: #52525B;");
+
+        VBox listBox = new VBox(5);
+        if (commentsNode.isArray()) {
+            for (JsonNode c : commentsNode) {
+                listBox.getChildren().add(commentBubble(
+                    c.path("authorEmail").asText("engineer"),
+                    c.path("createdAt").asText(""),
+                    c.path("content").asText("")
+                ));
+            }
+        }
+
+        TextField tfComment = new TextField();
+        tfComment.setPromptText("Post team finding or follow-up comment...");
+        tfComment.setStyle("-fx-padding: 6 10; -fx-font-size: 12px;");
+        HBox.setHgrow(tfComment, Priority.ALWAYS);
+
+        Button btnPost = UITheme.wsSecondaryBtn("Post", null);
+        btnPost.setPadding(new Insets(5, 11, 5, 11));
+
+        Runnable doPost = () -> {
+            String msg = tfComment.getText().trim();
+            if (msg.isEmpty()) return;
+            btnPost.setDisable(true);
+            new Thread(() -> {
+                try {
+                    HttpResponse<String> r = ApiClient.addComment(invId, msg);
+                    if (r.statusCode() == 201 || r.statusCode() == 200) {
+                        JsonNode added = mapper.readTree(r.body());
+                        Platform.runLater(() -> {
+                            tfComment.clear();
+                            btnPost.setDisable(false);
+                            listBox.getChildren().add(commentBubble(
+                                added.path("authorEmail").asText(ApiClient.getCurrentUserEmail() != null ? ApiClient.getCurrentUserEmail() : "you"),
+                                added.path("createdAt").asText(""),
+                                added.path("content").asText(msg)
+                            ));
+                            ((Label) cHead.getChildren().get(1)).setText("Team comments (" + listBox.getChildren().size() + ")");
+                            notifyToast("Comment posted");
+                        });
+                    } else {
+                        Platform.runLater(() -> {
+                            btnPost.setDisable(false);
+                            setStatus("Comment post failed (" + r.statusCode() + ")", UITheme.COLOR_DANGER);
+                        });
+                    }
+                } catch (Exception ex) {
+                    Platform.runLater(() -> {
+                        btnPost.setDisable(false);
+                        setStatus("Comment error: " + ex.getMessage(), UITheme.COLOR_DANGER);
+                    });
+                }
+            }).start();
+        };
+        btnPost.setOnAction(e -> doPost.run());
+        tfComment.setOnAction(e -> doPost.run());
+
+        HBox composer = new HBox(6, tfComment, btnPost);
+        composer.setAlignment(Pos.CENTER_LEFT);
+        wrap.getChildren().addAll(cHead, listBox, composer);
+        return wrap;
+    }
+
+    private VBox commentBubble(String author, String ts, String text) {
+        VBox b = new VBox(2);
+        b.setPadding(new Insets(6, 9, 6, 9));
+        b.setStyle("-fx-background-color: #FFFFFF; -fx-border-color: " + UITheme.WS_BORDER + "; -fx-border-width: 1; -fx-border-radius: 6; -fx-background-radius: 6;");
+        Label meta = new Label(author + " · " + formatIso(ts));
+        meta.setMnemonicParsing(false);
+        meta.setStyle("-fx-font-size: 10.5px; -fx-text-fill: #71717A;");
+        Label body = new Label(text);
+        body.setMnemonicParsing(false);
+        body.setWrapText(true);
+        body.setStyle("-fx-font-size: 12px; -fx-text-fill: #18181B;");
+        b.getChildren().addAll(meta, body);
+        return b;
     }
 
     // ── Update Incident Status ────────────────────────────────────
@@ -721,10 +1377,16 @@ public class IncidentsView extends BorderPane {
                 if (res.statusCode() == 200) {
                     Platform.runLater(() -> {
                         setStatus("Updated Incident #" + sel.id.get() + " to " + UITheme.capitalizeWord(newStatus), UITheme.POS_DOT);
+                        notifyToast("Incident #" + sel.id.get() + " marked " + UITheme.capitalizeWord(newStatus));
                         refreshIncidents();
+                        if (onDataChanged != null) onDataChanged.run();
                     });
                 } else {
-                    Platform.runLater(() -> setStatus("Failed to update status (" + res.statusCode() + ")", UITheme.COLOR_DANGER));
+                    String err = extractServerError(res.body(), "Failed to update status (" + res.statusCode() + ")");
+                    Platform.runLater(() -> {
+                        setStatus(err, UITheme.COLOR_DANGER);
+                        notifyToast(err);
+                    });
                 }
             } catch (Exception ex) {
                 Platform.runLater(() -> setStatus("Update error: " + ex.getMessage(), UITheme.COLOR_DANGER));
@@ -801,14 +1463,17 @@ public class IncidentsView extends BorderPane {
         summaryCard.setPadding(new Insets(14));
         summaryCard.setStyle("-fx-background-color: #EFF6FF; -fx-border-color: #DBEAFE; -fx-border-width: 1; -fx-border-radius: 10; -fx-background-radius: 10;");
         Label lblErrType = new Label(n.path("errorType").asText("Detected Exception"));
+        lblErrType.setMnemonicParsing(false);
         lblErrType.setWrapText(true);
         lblErrType.setStyle("-fx-font-size: 15px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
 
         Label lblComp = new Label("Component: " + n.path("affectedComponent").asText("Unknown"));
+        lblComp.setMnemonicParsing(false);
         lblComp.setWrapText(true);
         lblComp.setStyle(UITheme.monoStyle(12, "#1D4ED8"));
 
         Label lblRoot = new Label(n.path("rootCause").asText(""));
+        lblRoot.setMnemonicParsing(false);
         lblRoot.setWrapText(true);
         lblRoot.setStyle("-fx-font-size: 13px; -fx-text-fill: #18181B; -fx-line-spacing: 3px;");
         summaryCard.getChildren().addAll(UITheme.wsSectionLabel("Root cause analysis"), lblErrType, lblComp, lblRoot);
@@ -828,6 +1493,7 @@ public class IncidentsView extends BorderPane {
             num.setStyle("-fx-background-color: #09090B; -fx-text-fill: #FFFFFF; -fx-font-size: 11px; -fx-font-weight: 500; -fx-background-radius: 4;");
 
             Label fTxt = new Label(fix.asText());
+            fTxt.setMnemonicParsing(false);
             fTxt.setWrapText(true);
             fTxt.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #18181B;");
             fixRow.getChildren().addAll(num, fTxt);
@@ -929,8 +1595,10 @@ public class IncidentsView extends BorderPane {
                     Platform.runLater(() -> {
                         renderMultiAgentResult(sel, n);
                         setStatus("6-agent investigation saved for #" + sel.id.get(), UITheme.POS_DOT);
+                        notifyToast("6-agent investigation saved for #" + sel.id.get());
                         refreshIncidents();
                         loadSavedInvestigations(sel);
+                        if (onDataChanged != null) onDataChanged.run();
                     });
                 } else {
                     Platform.runLater(() -> {
@@ -952,84 +1620,283 @@ public class IncidentsView extends BorderPane {
     private void renderMultiAgentResult(IncidentRow sel, JsonNode n) {
         aiPane.getChildren().clear();
 
-        HBox topRow = new HBox(6);
-        topRow.setAlignment(Pos.CENTER_LEFT);
-        Label doneBadge = UITheme.positiveBadge("6/6 Agents completed");
-        String sevVal = n.path("severityEvaluation").path("assessedSeverity").asText(sel.severity.get());
-        topRow.getChildren().addAll(doneBadge, UITheme.severityBadge(sevVal));
-
-        JsonNode fin = n.path("finalReport");
-        VBox execCard = new VBox(6);
-        execCard.setPadding(new Insets(14));
-        execCard.setStyle("-fx-background-color: #EFF6FF; -fx-border-color: #DBEAFE; -fx-border-width: 1; -fx-border-radius: 10; -fx-background-radius: 10;");
-        Label execLbl = new Label(fin.path("executiveSummary").asText("Investigation complete."));
-        execLbl.setWrapText(true);
-        execLbl.setStyle("-fx-font-size: 13px; -fx-font-weight: 500; -fx-text-fill: #09090B; -fx-line-spacing: 3px;");
-        execCard.getChildren().addAll(UITheme.wsSectionLabel("Executive summary"), execLbl);
-
         JsonNode logA = n.path("logAnalysis");
         JsonNode cls  = n.path("errorClassification");
         JsonNode sev  = n.path("severityEvaluation");
         JsonNode rc   = n.path("rootCauseAnalysis");
         JsonNode res  = n.path("resolutionPlan");
+        JsonNode fin  = n.path("finalReport");
 
-        VBox logCard = infoCard(
-            "1. Log analysis · " + logA.path("failingMethod").asText("Trace"),
-            logA.path("keyAnomaly").asText(""),
-            UITheme.BG_CANVAS
-        );
+        HBox topRow = new HBox(6);
+        topRow.setAlignment(Pos.CENTER_LEFT);
+        Label doneBadge = UITheme.positiveBadge("6/6 Agents completed");
+        String sevVal = sev.path("assessedSeverity").asText(sel.severity.get());
+        Label transientBadge = UITheme.neutralTag(cls.path("isTransient").asBoolean(false) ? "Transient" : "Persistent");
+        Label catBadge = UITheme.neutralTag(UITheme.capitalizeWord(cls.path("primaryCategory").asText("General")));
+        topRow.getChildren().addAll(doneBadge, UITheme.severityBadge(sevVal), transientBadge, catBadge);
 
-        String clsBody = cls.path("primaryCategory").asText("") + " (" + cls.path("subType").asText("") + ")  ·  Confidence: "
-            + Math.round(cls.path("confidenceScore").asDouble(0) * 100) + "%";
-        VBox clsCard = infoCard("2. Classification & blast radius", clsBody + "\nImpact: " + sev.path("userImpact").asText(""), UITheme.BG_CANVAS);
+        VBox execCard = new VBox(6);
+        execCard.setPadding(new Insets(14));
+        execCard.setStyle("-fx-background-color: #EFF6FF; -fx-border-color: #DBEAFE; -fx-border-width: 1; -fx-border-radius: 10; -fx-background-radius: 10;");
+        Label execLbl = new Label(fin.path("executiveSummary").asText("Investigation complete."));
+        execLbl.setMnemonicParsing(false);
+        execLbl.setWrapText(true);
+        execLbl.setStyle("-fx-font-size: 13px; -fx-font-weight: 500; -fx-text-fill: #09090B; -fx-line-spacing: 3px;");
+        execCard.getChildren().addAll(UITheme.wsSectionLabel("Executive summary"), execLbl);
 
-        VBox rcCard = infoCard(
-            "3-4. Root cause · " + rc.path("affectedComponent").asText("Core"),
-            rc.path("underlyingCause").asText(rc.path("primaryHypothesis").asText("")),
-            UITheme.BG_CANVAS
-        );
+        // 1. Log Analysis Card (with failingMethod, extractedStackTraces, logMetadata)
+        VBox logCard = new VBox(6);
+        logCard.setPadding(new Insets(12, 14, 12, 14));
+        logCard.setStyle(UITheme.softCardStyle());
+        Label logHead = new Label("1. Log analysis · " + logA.path("failingMethod").asText("Trace"));
+        logHead.setMnemonicParsing(false);
+        logHead.setWrapText(true);
+        logHead.setStyle("-fx-font-size: 13px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
+        Label logAnom = new Label(logA.path("keyAnomaly").asText(""));
+        logAnom.setMnemonicParsing(false);
+        logAnom.setWrapText(true);
+        logAnom.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #3F3F46;");
+        logCard.getChildren().addAll(logHead, logAnom);
 
+        JsonNode frames = logA.path("extractedStackTraces");
+        if (frames.isArray() && !frames.isEmpty()) {
+            StringBuilder fb = new StringBuilder();
+            for (JsonNode fr : frames) fb.append("• ").append(fr.asText()).append('\n');
+            Label frLbl = new Label(fb.toString().trim());
+            frLbl.setMnemonicParsing(false);
+            frLbl.setWrapText(true);
+            frLbl.setStyle(UITheme.monoStyle(11, "#18181B"));
+            logCard.getChildren().add(frLbl);
+        }
+        JsonNode metaMap = logA.path("logMetadata");
+        if (metaMap.isObject() && !metaMap.isEmpty()) {
+            FlowPane metaFlow = new FlowPane(6, 5);
+            Iterator<Map.Entry<String, JsonNode>> fields = metaMap.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> en = fields.next();
+                metaFlow.getChildren().add(UITheme.neutralTag(en.getKey() + ": " + en.getValue().asText()));
+            }
+            logCard.getChildren().add(metaFlow);
+        }
+
+        // 2-3. Classification & Blast Radius Card
+        VBox clsCard = new VBox(6);
+        clsCard.setPadding(new Insets(12, 14, 12, 14));
+        clsCard.setStyle(UITheme.softCardStyle());
+        Label clsHead = new Label("2–3. Classification & blast radius");
+        clsHead.setStyle("-fx-font-size: 13px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
+        String subType = cls.path("subType").asText("");
+        String conf = Math.round(cls.path("confidenceScore").asDouble(0) * 100) + "%";
+        String blast = sev.path("blastRadius").asText("");
+        String impact = sev.path("userImpact").asText("");
+        String just = sev.path("justification").asText("");
+        Label clsLine = new Label(cls.path("primaryCategory").asText("") + (subType.isBlank() ? "" : " (" + subType + ")") + " · Confidence: " + conf);
+        clsLine.setMnemonicParsing(false);
+        clsLine.setWrapText(true);
+        clsLine.setStyle("-fx-font-size: 12.5px; -fx-font-weight: 500; -fx-text-fill: #1D4ED8;");
+        clsCard.getChildren().addAll(clsHead, clsLine);
+        if (!blast.isBlank()) clsCard.getChildren().add(wrappedBody("Blast radius: " + blast));
+        if (!impact.isBlank()) clsCard.getChildren().add(wrappedBody("User impact: " + impact));
+        if (!just.isBlank()) clsCard.getChildren().add(wrappedBody("Severity justification: " + just));
+
+        // 4. Root Cause Card (with contributingFactors)
+        VBox rcCard = new VBox(6);
+        rcCard.setPadding(new Insets(12, 14, 12, 14));
+        rcCard.setStyle(UITheme.softCardStyle());
+        Label rcHead = new Label("4. Root cause · " + rc.path("affectedComponent").asText("Core"));
+        rcHead.setMnemonicParsing(false);
+        rcHead.setWrapText(true);
+        rcHead.setStyle("-fx-font-size: 13px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
+        rcCard.getChildren().add(rcHead);
+        String hyp = rc.path("primaryHypothesis").asText("");
+        String underlying = rc.path("underlyingCause").asText("");
+        if (!hyp.isBlank()) rcCard.getChildren().add(wrappedBody("Hypothesis: " + hyp));
+        if (!underlying.isBlank()) rcCard.getChildren().add(wrappedBody(underlying));
+        for (JsonNode factor : rc.path("contributingFactors")) {
+            rcCard.getChildren().add(wrappedBody("•  " + factor.asText()));
+        }
+
+        // 5. Resolution Plan Card (with preventativeAction & Copy Patch button)
         VBox resCard = new VBox(8);
-        resCard.setPadding(new Insets(12));
+        resCard.setPadding(new Insets(12, 14, 12, 14));
         resCard.setStyle(UITheme.softCardStyle());
         resCard.getChildren().add(UITheme.wsSectionLabel("5. Resolution plan"));
         Label mitLbl = new Label("Immediate mitigation: " + res.path("immediateMitigation").asText(""));
+        mitLbl.setMnemonicParsing(false);
         mitLbl.setWrapText(true);
         mitLbl.setStyle("-fx-font-size: 12.5px; -fx-font-weight: 500; -fx-text-fill: #166534;");
         resCard.getChildren().add(mitLbl);
 
         for (JsonNode step : res.path("remediationSteps")) {
-            Label s = new Label("•  " + step.asText());
-            s.setWrapText(true);
-            s.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #27272A;");
-            resCard.getChildren().add(s);
+            resCard.getChildren().add(wrappedBody("•  " + step.asText()));
+        }
+
+        String prevAct = res.path("preventativeAction").asText("");
+        if (!prevAct.isBlank()) {
+            Label prevLbl = new Label("Preventative action: " + prevAct);
+            prevLbl.setMnemonicParsing(false);
+            prevLbl.setWrapText(true);
+            prevLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #1D4ED8; -fx-font-weight: 500;");
+            resCard.getChildren().add(prevLbl);
         }
 
         String codePatch = res.path("suggestedCodePatch").asText("");
         if (!codePatch.isBlank()) {
+            HBox patchHead = new HBox(8, UITheme.wsSectionLabel("Suggested code patch"), new Region());
+            patchHead.setAlignment(Pos.CENTER_LEFT);
+            HBox.setHgrow(patchHead.getChildren().get(1), Priority.ALWAYS);
+            Button btnCopyPatch = miniIconBtn("Copy patch", UITheme.copyIcon(12, Color.web("#52525B")));
+            btnCopyPatch.setOnAction(e -> copyToClipboard(codePatch, "Copied suggested patch to clipboard"));
+            patchHead.getChildren().add(btnCopyPatch);
+
             TextArea patchArea = new TextArea(codePatch);
             patchArea.setEditable(false);
             patchArea.setPrefRowCount(4);
             patchArea.setStyle(UITheme.monoStyle(11.5, "#18181B"));
-            resCard.getChildren().add(patchArea);
+            resCard.getChildren().addAll(patchHead, patchArea);
         }
 
+        // 6. Full Markdown Report Card (with Timeline, Next Steps, Copy & Export .md)
         VBox fullRepCard = new VBox(8);
-        fullRepCard.setPadding(new Insets(12));
+        fullRepCard.setPadding(new Insets(12, 14, 12, 14));
         fullRepCard.setStyle(UITheme.softCardStyle());
-        fullRepCard.getChildren().add(UITheme.wsSectionLabel("6. Full markdown report"));
-        TextArea reportArea = new TextArea(fin.path("formattedMarkdownReport").asText(""));
+
+        String mdReport = fin.path("formattedMarkdownReport").asText("");
+        HBox repHead = new HBox(6, UITheme.wsSectionLabel("6. Full markdown report"), new Region());
+        repHead.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(repHead.getChildren().get(1), Priority.ALWAYS);
+        Button btnCopyMd = miniIconBtn("Copy .md", UITheme.copyIcon(12, Color.web("#52525B")));
+        btnCopyMd.setOnAction(e -> copyToClipboard(mdReport, "Copied Markdown report"));
+        Button btnExportMd = miniIconBtn("Export .md", UITheme.downloadIcon(12, Color.web("#09090B")));
+        btnExportMd.setOnAction(e -> exportMarkdownReport(sel.id.get(), mdReport));
+        repHead.getChildren().addAll(btnCopyMd, btnExportMd);
+
+        fullRepCard.getChildren().add(repHead);
+        String timeline = fin.path("incidentTimeline").asText("");
+        String nextSteps = fin.path("nextSteps").asText("");
+        if (!timeline.isBlank()) fullRepCard.getChildren().add(wrappedBody("Timeline: " + timeline));
+        if (!nextSteps.isBlank()) fullRepCard.getChildren().add(wrappedBody("Next steps: " + nextSteps));
+
+        TextArea reportArea = new TextArea(mdReport);
         reportArea.setEditable(false);
         reportArea.setWrapText(true);
         reportArea.setPrefRowCount(10);
         reportArea.setStyle(UITheme.monoStyle(11.5, "#18181B"));
         fullRepCard.getChildren().add(reportArea);
 
-        aiPane.getChildren().addAll(topRow, execCard, logCard, clsCard, rcCard, resCard, fullRepCard);
+        // Quick Stage Filter Pills
+        FlowPane stageBar = new FlowPane(5, 5);
+        String[] stageLabels = {"All (6)", "1 Log", "2–3 Impact", "4 Root cause", "5 Fix", "6 Report"};
+        VBox[] stageCards = {null, logCard, clsCard, rcCard, resCard, fullRepCard};
+        List<Button> stageBtns = new ArrayList<>();
+        String pActive = "-fx-background-color: #09090B; -fx-text-fill: #FFFFFF; -fx-font-size: 11px; -fx-font-weight: 500; -fx-padding: 3 9; -fx-background-radius: 6; -fx-cursor: hand;";
+        String pIdle   = "-fx-background-color: #F4F4F5; -fx-text-fill: #52525B; -fx-font-size: 11px; -fx-font-weight: 500; -fx-padding: 3 9; -fx-background-radius: 6; -fx-cursor: hand;";
+        for (int s = 0; s < stageLabels.length; s++) {
+            final int sIdx = s;
+            Button sb = new Button(stageLabels[s]);
+            sb.setMnemonicParsing(false);
+            sb.setStyle(s == 0 ? pActive : pIdle);
+            sb.setOnAction(e -> {
+                for (int k = 0; k < stageBtns.size(); k++) {
+                    stageBtns.get(k).setStyle(k == sIdx ? pActive : pIdle);
+                }
+                for (int k = 1; k < stageCards.length; k++) {
+                    boolean show = (sIdx == 0 || sIdx == k);
+                    stageCards[k].setVisible(show);
+                    stageCards[k].setManaged(show);
+                }
+            });
+            stageBtns.add(sb);
+            stageBar.getChildren().add(sb);
+        }
+
+        aiPane.getChildren().addAll(topRow, stageBar, execCard, logCard, clsCard, rcCard, resCard, fullRepCard);
         workbenchScroll.setVvalue(0);
     }
 
+    private void exportMarkdownReport(String incidentId, String mdContent) {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Export Investigation Markdown Report");
+        fc.setInitialFileName("incident-" + incidentId + "-report.md");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Markdown files (*.md)", "*.md"));
+        File out = fc.showSaveDialog(getScene() != null ? getScene().getWindow() : null);
+        if (out != null) {
+            try {
+                Files.writeString(out.toPath(), mdContent != null ? mdContent : "", StandardCharsets.UTF_8);
+                setStatus("Exported report to " + out.getName(), UITheme.POS_DOT);
+                notifyToast("Saved " + out.getName());
+            } catch (Exception ex) {
+                setStatus("Export failed: " + ex.getMessage(), UITheme.COLOR_DANGER);
+            }
+        }
+    }
+
+    private void copyToClipboard(String text, String toastMsg) {
+        ClipboardContent content = new ClipboardContent();
+        content.putString(text != null ? text : "");
+        Clipboard.getSystemClipboard().setContent(content);
+        notifyToast(toastMsg);
+    }
+
+    private void notifyToast(String msg) {
+        if (onNotifyToast != null && msg != null && !msg.isBlank()) {
+            onNotifyToast.accept(msg);
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────
+    private Label wrappedBody(String txt) {
+        Label l = new Label(txt);
+        l.setMnemonicParsing(false);
+        l.setWrapText(true);
+        l.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #3F3F46; -fx-line-spacing: 2px;");
+        return l;
+    }
+
+    private HBox metaChip(String key, String val) {
+        Label k = new Label(key + ":");
+        k.setStyle("-fx-font-size: 11px; -fx-text-fill: #71717A; -fx-font-weight: 500;");
+        Label v = new Label(val);
+        v.setMnemonicParsing(false);
+        v.setStyle("-fx-font-size: 11px; -fx-text-fill: #09090B; -fx-font-weight: 500;");
+        HBox box = new HBox(4, k, v);
+        box.setAlignment(Pos.CENTER_LEFT);
+        return box;
+    }
+
+    private Button miniIconBtn(String label, StackPane icon) {
+        Button b = new Button(label, icon);
+        b.setContentDisplay(javafx.scene.control.ContentDisplay.LEFT);
+        b.setGraphicTextGap(5);
+        b.setCursor(Cursor.HAND);
+        String normal = "-fx-background-color: #FFFFFF; -fx-text-fill: #27272A; -fx-border-color: #E4E4E7; -fx-border-width: 1; -fx-border-radius: 6; -fx-background-radius: 6; -fx-font-size: 11px; -fx-font-weight: 500; -fx-padding: 3 8;";
+        String hover  = "-fx-background-color: #F4F4F5; -fx-text-fill: #09090B; -fx-border-color: #D4D4D8; -fx-border-width: 1; -fx-border-radius: 6; -fx-background-radius: 6; -fx-font-size: 11px; -fx-font-weight: 500; -fx-padding: 3 8;";
+        b.setStyle(normal);
+        b.setOnMouseEntered(e -> b.setStyle(hover));
+        b.setOnMouseExited(e -> b.setStyle(normal));
+        return b;
+    }
+
+    private String formatIso(String iso) {
+        if (iso == null || iso.isBlank()) return "—";
+        try {
+            return LocalDateTime.parse(iso).format(DateTimeFormatter.ofPattern("dd MMM, HH:mm"));
+        } catch (Exception e) {
+            return iso.length() > 16 ? iso.substring(0, 16).replace('T', ' ') : iso;
+        }
+    }
+
+    private String extractServerError(String body, String fallback) {
+        try {
+            JsonNode n = mapper.readTree(body);
+            if (n.hasNonNull("message")) return n.path("message").asText(fallback);
+            if (n.hasNonNull("error")) return n.path("error").asText(fallback);
+            return fallback;
+        } catch (Exception e) {
+            return (body != null && !body.isBlank() && body.length() < 120) ? body : fallback;
+        }
+    }
+
     private VBox infoCard(String title, String body, String bg) {
         VBox box = new VBox(5);
         box.setPadding(new Insets(12, 14, 12, 14));
@@ -1038,9 +1905,11 @@ public class IncidentsView extends BorderPane {
             "-fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;"
         );
         Label t = new Label(title);
+        t.setMnemonicParsing(false);
         t.setWrapText(true);
         t.setStyle("-fx-font-size: 13px; -fx-font-weight: 500; -fx-text-fill: #09090B;");
         Label b = new Label(body);
+        b.setMnemonicParsing(false);
         b.setWrapText(true);
         b.setStyle("-fx-font-size: 12.5px; -fx-text-fill: #52525B; -fx-line-spacing: 2px;");
         box.getChildren().addAll(t, b);

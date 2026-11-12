@@ -39,6 +39,20 @@ public class ApiClient {
         return jwtToken;
     }
 
+    public static boolean checkBackendHealth() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/actuator/health"))
+                    .timeout(Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            HttpResponse<String> res = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            return res.statusCode() >= 200 && res.statusCode() < 500;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public static HttpResponse<String> login(String email, String password) throws Exception {
         String json = objectMapper.writeValueAsString(new LoginPayload(email, password));
         HttpRequest request = HttpRequest.newBuilder()
@@ -60,8 +74,13 @@ public class ApiClient {
     }
 
     public static HttpResponse<String> getIncidents() throws Exception {
+        return getIncidents(false, 0, 50);
+    }
+
+    public static HttpResponse<String> getIncidents(boolean onlyMine, int page, int size) throws Exception {
+        String path = onlyMine ? "/api/incidents/my" : "/api/incidents";
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/api/incidents?page=0&size=50&sort=createdAt,desc"))
+                .uri(URI.create(BASE_URL + path + "?page=" + Math.max(0, page) + "&size=" + Math.max(1, size) + "&sort=createdAt,desc"))
                 .GET();
         if (jwtToken != null) {
             builder.header("Authorization", "Bearer " + jwtToken);
@@ -90,12 +109,28 @@ public class ApiClient {
     }
 
     public static HttpResponse<String> updateIncidentStatus(Long incidentId, String status) throws Exception {
-        String json = objectMapper.writeValueAsString(new UpdateStatusPayload(status));
+        return updateIncident(incidentId, null, null, null, null, status, null);
+    }
+
+    public static HttpResponse<String> updateIncident(Long incidentId, String title, String description,
+                                                      String errorLogs, String severity, String status,
+                                                      String incidentType) throws Exception {
+        var payload = new UpdateIncidentPayload(title, description, errorLogs, severity, status, incidentType);
+        String json = objectMapper.writeValueAsString(payload);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/api/incidents/" + incidentId))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + jwtToken)
                 .PUT(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public static HttpResponse<String> deleteIncident(Long incidentId) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/incidents/" + incidentId))
+                .header("Authorization", "Bearer " + jwtToken)
+                .DELETE()
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
@@ -109,11 +144,61 @@ public class ApiClient {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
+    public static HttpResponse<String> createInvestigation(Long incidentId, String title, String hypothesis,
+                                                           String notes, String attachedLogs, String rootCauseAnalysis,
+                                                           String resolutionSteps, String progress) throws Exception {
+        var payload = new CreateInvestigationPayload(title, notes, hypothesis, attachedLogs, rootCauseAnalysis, resolutionSteps, progress);
+        String json = objectMapper.writeValueAsString(payload);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/incidents/" + incidentId + "/investigations"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + jwtToken)
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public static HttpResponse<String> updateInvestigation(Long investigationId, String progress, String notes,
+                                                           String hypothesis, String rootCauseAnalysis,
+                                                           String resolutionSteps) throws Exception {
+        var payload = new UpdateInvestigationPayload(notes, hypothesis, rootCauseAnalysis, resolutionSteps, progress);
+        String json = objectMapper.writeValueAsString(payload);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/investigations/" + investigationId))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + jwtToken)
+                .PUT(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public static HttpResponse<String> addComment(Long investigationId, String content) throws Exception {
+        String json = objectMapper.writeValueAsString(new CommentPayload(content));
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/investigations/" + investigationId + "/comments"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + jwtToken)
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
     public static HttpResponse<String> getDashboardMetrics() throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/api/analytics/dashboard"))
                 .header("Authorization", "Bearer " + jwtToken)
                 .GET()
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public static HttpResponse<String> diagnoseRawLogs(String title, String description, String errorLogs) throws Exception {
+        String json = objectMapper.writeValueAsString(new AiDiagnosisPayload(title, description, errorLogs));
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/api/ai/diagnose"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + jwtToken)
+                .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
@@ -139,5 +224,9 @@ public class ApiClient {
     public static record LoginPayload(String email, String password) {}
     public static record RegisterPayload(String fullName, String email, String password) {}
     public static record CreateIncidentPayload(String title, String description, String errorLogs, String severity, String status, String incidentType) {}
-    public static record UpdateStatusPayload(String status) {}
+    public static record UpdateIncidentPayload(String title, String description, String errorLogs, String severity, String status, String incidentType) {}
+    public static record CreateInvestigationPayload(String title, String notes, String hypothesis, String attachedLogs, String rootCauseAnalysis, String resolutionSteps, String progress) {}
+    public static record UpdateInvestigationPayload(String notes, String hypothesis, String rootCauseAnalysis, String resolutionSteps, String progress) {}
+    public static record CommentPayload(String content) {}
+    public static record AiDiagnosisPayload(String title, String description, String errorLogs) {}
 }

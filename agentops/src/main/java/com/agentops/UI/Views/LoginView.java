@@ -17,6 +17,7 @@ import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -24,6 +25,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.util.Duration;
 
 /**
@@ -39,6 +41,11 @@ public class LoginView extends StackPane {
     private TextField txtFullName;
     private TextField txtEmail;
     private PasswordField txtPass;
+    private TextField txtPassVisible;
+    private boolean passVisible = false;
+    private HBox healthPill;
+    private Circle healthDot;
+    private Label healthLbl;
     private HBox statusBanner;
     private Label statusLbl;
     private Label cardHeading;
@@ -60,12 +67,38 @@ public class LoginView extends StackPane {
         buildBackground();
         buildTopBackBar();
         buildCard();
+        refreshHealth();
     }
 
     public void setRegisterMode(boolean register) {
         if (tabLogin != null && tabReg != null) {
             switchMode(register);
         }
+        refreshHealth();
+    }
+
+    public void refreshHealth() {
+        if (healthPill == null) return;
+        healthDot.setFill(Color.web(UITheme.INK_DIM));
+        healthLbl.setText("Checking API...");
+        healthLbl.setStyle("-fx-font-size: 11px; -fx-font-weight: 500; -fx-text-fill: #52525B;");
+        healthPill.setStyle("-fx-background-color: #F4F4F5; -fx-border-color: #E4E4E7; -fx-border-width: 1; -fx-border-radius: 999; -fx-background-radius: 999; -fx-padding: 3 9; -fx-cursor: hand;");
+        new Thread(() -> {
+            boolean up = ApiClient.checkBackendHealth();
+            Platform.runLater(() -> {
+                if (up) {
+                    healthDot.setFill(Color.web(UITheme.POS_DOT));
+                    healthLbl.setText("API online");
+                    healthLbl.setStyle("-fx-font-size: 11px; -fx-font-weight: 500; -fx-text-fill: #166534;");
+                    healthPill.setStyle("-fx-background-color: #F0FDF4; -fx-border-color: #BBF7D0; -fx-border-width: 1; -fx-border-radius: 999; -fx-background-radius: 999; -fx-padding: 3 9; -fx-cursor: hand;");
+                } else {
+                    healthDot.setFill(Color.web(UITheme.COLOR_DANGER));
+                    healthLbl.setText("API offline");
+                    healthLbl.setStyle("-fx-font-size: 11px; -fx-font-weight: 500; -fx-text-fill: #991B1B;");
+                    healthPill.setStyle("-fx-background-color: #FEF2F2; -fx-border-color: #FECACA; -fx-border-width: 1; -fx-border-radius: 999; -fx-background-radius: 999; -fx-padding: 3 9; -fx-cursor: hand;");
+                }
+            });
+        }).start();
     }
 
     private void buildBackground() {
@@ -139,7 +172,20 @@ public class LoginView extends StackPane {
         StackPane logo = UITheme.brandLogoMark(20, false);
         Label brand = new Label("IncidentIQ");
         brand.setStyle("-fx-font-size: 15px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
-        brandRow.getChildren().addAll(logo, brand);
+
+        Region bsp = new Region();
+        HBox.setHgrow(bsp, Priority.ALWAYS);
+
+        healthDot = new Circle(3.5, Color.web(UITheme.INK_DIM));
+        healthLbl = new Label("Checking API...");
+        healthLbl.setStyle("-fx-font-size: 11px; -fx-font-weight: 500; -fx-text-fill: #52525B;");
+        healthPill = new HBox(5, healthDot, healthLbl);
+        healthPill.setAlignment(Pos.CENTER);
+        healthPill.setStyle("-fx-background-color: #F4F4F5; -fx-border-color: #E4E4E7; -fx-border-width: 1; -fx-border-radius: 999; -fx-background-radius: 999; -fx-padding: 3 9; -fx-cursor: hand;");
+        healthPill.setOnMouseClicked(e -> refreshHealth());
+        Tooltip.install(healthPill, new Tooltip("Spring Boot API status at http://localhost:8080 (click to re-check)"));
+
+        brandRow.getChildren().addAll(logo, brand, bsp, healthPill);
 
         cardHeading = new Label("Sign in to IncidentIQ");
         cardHeading.setStyle("-fx-font-size: 22px; -fx-font-weight: 600; -fx-text-fill: #09090B;");
@@ -182,10 +228,48 @@ public class LoginView extends StackPane {
         txtEmail.setPromptText("engineer@company.com");
         VBox emailBox = UITheme.formField("Work email", txtEmail);
 
-        // Password
+        // Password + Reveal Toggle
         txtPass = new PasswordField();
         txtPass.setPromptText("••••••••");
-        VBox passBox = UITheme.formFieldHint("Password", "(min 6 chars)", txtPass);
+        txtPass.setStyle("-fx-padding: 9 38 9 12;");
+
+        txtPassVisible = new TextField();
+        txtPassVisible.setPromptText("••••••••");
+        txtPassVisible.setStyle("-fx-padding: 9 38 9 12;");
+        txtPassVisible.setVisible(false);
+        txtPassVisible.setManaged(false);
+        txtPassVisible.textProperty().bindBidirectional(txtPass.textProperty());
+
+        Button btnEye = new Button();
+        btnEye.setGraphic(UITheme.eyeIcon(15, Color.web("#71717A")));
+        btnEye.setStyle("-fx-background-color: transparent; -fx-padding: 5 7; -fx-background-radius: 6; -fx-cursor: hand;");
+        btnEye.setFocusTraversable(false);
+        btnEye.setTooltip(new Tooltip("Show password"));
+        btnEye.setOnMouseEntered(e -> btnEye.setStyle("-fx-background-color: #F4F4F5; -fx-padding: 5 7; -fx-background-radius: 6; -fx-cursor: hand;"));
+        btnEye.setOnMouseExited(e -> btnEye.setStyle("-fx-background-color: transparent; -fx-padding: 5 7; -fx-background-radius: 6; -fx-cursor: hand;"));
+        btnEye.setOnAction(e -> {
+            passVisible = !passVisible;
+            txtPassVisible.setVisible(passVisible);
+            txtPassVisible.setManaged(passVisible);
+            txtPass.setVisible(!passVisible);
+            txtPass.setManaged(!passVisible);
+            btnEye.setGraphic(passVisible
+                ? UITheme.eyeOffIcon(15, Color.web("#09090B"))
+                : UITheme.eyeIcon(15, Color.web("#71717A")));
+            btnEye.setTooltip(new Tooltip(passVisible ? "Hide password" : "Show password"));
+            if (passVisible) {
+                txtPassVisible.requestFocus();
+                txtPassVisible.positionCaret(txtPassVisible.getText().length());
+            } else {
+                txtPass.requestFocus();
+                txtPass.positionCaret(txtPass.getText().length());
+            }
+        });
+
+        StackPane passWrap = new StackPane(txtPass, txtPassVisible, btnEye);
+        StackPane.setAlignment(btnEye, Pos.CENTER_RIGHT);
+        StackPane.setMargin(btnEye, new Insets(0, 6, 0, 0));
+        VBox passBox = UITheme.formFieldHint("Password", "(min 6 chars)", passWrap);
 
         // Inline Validation Banner with SVG Alert Icon
         statusBanner = new HBox(8);
@@ -235,7 +319,11 @@ public class LoginView extends StackPane {
             else doLogin();
         });
         txtPass.setOnAction(e -> btnPrimary.fire());
-        txtEmail.setOnAction(e -> txtPass.requestFocus());
+        txtPassVisible.setOnAction(e -> btnPrimary.fire());
+        txtEmail.setOnAction(e -> {
+            if (passVisible) txtPassVisible.requestFocus();
+            else txtPass.requestFocus();
+        });
 
         return body;
     }

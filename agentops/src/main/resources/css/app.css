@@ -63,9 +63,12 @@
 /* Matches live /platform centered soft sky radial halo feathered cleanly into #FFFFFF */
 .serko-platform-halo-bg {
     -fx-background-color:
-        radial-gradient(center 50% 62%, radius 46%,
-            #96CBFA 0%, #CFE6FC 36%, #E5F2FF 64%, #FFFFFF 94%),
-        #FFFFFF;
+        #FFFFFF,
+        radial-gradient(center 50% 58%, radius 52%,
+            rgba(150, 203, 250, 0.85) 0%,
+            rgba(207, 230, 252, 0.72) 38%,
+            rgba(229, 242, 255, 0.42) 66%,
+            transparent 94%);
 }
 
 /* Matches live Feature 4 soft sky-to-periwinkle section wash */
@@ -97,12 +100,12 @@
 }
 
 .serko-btn-white {
-    -fx-background-color: rgba(255, 255, 255, 0.56);
+    -fx-background-color: rgba(255, 255, 255, 0.72);
     -fx-text-fill: #000000;
     -fx-font-weight: 500;
     -fx-font-size: 13.5px;
     -fx-background-radius: 999;
-    -fx-border-color: rgba(255, 255, 255, 0.85);
+    -fx-border-color: rgba(0, 0, 0, 0.08);
     -fx-border-radius: 999;
     -fx-border-width: 1;
     -fx-padding: 10 20;
@@ -110,14 +113,14 @@
 }
 .serko-btn-white:hover {
     -fx-background-color: #FFFFFF;
-    -fx-border-color: rgba(0, 0, 0, 0.14);
+    -fx-border-color: rgba(0, 0, 0, 0.18);
 }
 
 /* Matches Serko top-right "Join waitlist >" rainbow-ringed pill */
 .serko-btn-tertiary {
     -fx-background-color:
         linear-gradient(to right, #FF8C51, #F56293, #CF69E0, #1B98F2),
-        rgba(255, 255, 255, 0.82);
+        #FFFFFF;
     -fx-background-insets: 0, 1.5;
     -fx-background-radius: 999, 999;
     -fx-text-fill: #000000;
@@ -129,7 +132,8 @@
 .serko-btn-tertiary:hover {
     -fx-background-color:
         linear-gradient(to right, #FF8C51, #F56293, #CF69E0, #1B98F2),
-        #FFFFFF;
+        #F8FAFC;
+    -fx-effect: dropshadow(gaussian, rgba(207, 105, 224, 0.22), 14, 0, 0, 4);
 }
 
 .serko-btn-rainbow {
@@ -229,7 +233,7 @@
 .table-view .column-header {
     -fx-background-color: transparent;
     -fx-border-color: transparent;
-    -fx-padding: 10 14;
+    -fx-padding: 10 10;
 }
 .table-view .column-header .label {
     -fx-text-fill: #71717A;
@@ -257,7 +261,7 @@
     -fx-text-fill: #18181B;
     -fx-font-size: 13px;
     -fx-border-color: transparent;
-    -fx-padding: 0 14;
+    -fx-padding: 0 10;
     -fx-alignment: CENTER-LEFT;
 }
 .table-view .filler,
